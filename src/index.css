@@ -1,0 +1,43 @@
+:root {
+  font-family: Arial, "Segoe UI", sans-serif;
+
+  --bg: #fbfaf8;
+  --card: #ffffff;
+  --text: #292822;
+  --border: #ddd9d0;
+  --btn: #292822;
+  --btn-text: #ffffff;
+
+  color: var(--text);
+  background: var(--bg);
+}
+
+:root[data-theme="dark"] {
+  --bg: #15161a;
+  --card: #1f2126;
+  --text: #f1f0ec;
+  --border: #33363d;
+  --btn: #f1f0ec;
+  --btn-text: #15161a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.2s, color 0.2s;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input {
+  font: inherit;
+}
