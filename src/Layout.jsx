@@ -1,9 +1,8 @@
-import { useContext } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { StoreContext } from "./StoreContext";
+import { useStore } from "./StoreContext";
 
 function Layout() {
-  const { cart, theme, toggleTheme } = useContext(StoreContext);
+  const { cartCount, theme, toggleTheme, user, logout } = useStore();
 
   return (
     <>
@@ -16,8 +15,17 @@ function Layout() {
           <NavLink to="/" end>
             Каталог
           </NavLink>
-          <NavLink to="/cart">Корзина ({cart.length})</NavLink>
-          <NavLink to="/login">Вход</NavLink>
+          <NavLink to="/cart">Корзина ({cartCount})</NavLink>
+          {user ? (
+            <>
+              <NavLink to="/dashboard">{user.name}</NavLink>
+              <button type="button" onClick={logout}>
+                Выйти
+              </button>
+            </>
+          ) : (
+            <NavLink to="/login">Вход</NavLink>
+          )}
         </nav>
 
         <button type="button" onClick={toggleTheme}>

@@ -4,9 +4,13 @@
   --bg: #fbfaf8;
   --card: #ffffff;
   --text: #292822;
+  --muted: #6d6a61;
   --border: #ddd9d0;
   --btn: #292822;
   --btn-text: #ffffff;
+  --danger: #b03a2e;
+  --success: #2e7d4f;
+  --highlight: #f3efe6;
 
   color: var(--text);
   background: var(--bg);
@@ -16,9 +20,13 @@
   --bg: #15161a;
   --card: #1f2126;
   --text: #f1f0ec;
+  --muted: #a8a69f;
   --border: #33363d;
   --btn: #f1f0ec;
   --btn-text: #15161a;
+  --danger: #ff8a7a;
+  --success: #7ed6a5;
+  --highlight: #262a31;
 }
 
 * {
