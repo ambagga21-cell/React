@@ -74,25 +74,40 @@ async function initDatabase() {
         code VARCHAR(50) UNIQUE,
         discount_percent INT NOT NULL CHECK(discount_percent > 0 AND discount_percent <= 99),
         description VARCHAR(255),
+        first_order_only BOOLEAN DEFAULT FALSE,
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     await db.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS code VARCHAR(50)`);
     await db.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS description VARCHAR(255)`);
+    await db.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS first_order_only BOOLEAN DEFAULT FALSE`);
     await db.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
     await db.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await db.query(`ALTER TABLE coupons ALTER COLUMN name DROP NOT NULL`);
     await db.query(`UPDATE coupons SET code = name WHERE code IS NULL AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'name')`);
     await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_coupons_code ON coupons(code)`);
-    await db.query(`
-      INSERT INTO coupons (name, code, discount_percent, description)
-      VALUES 
-        ('LAVKA10', 'LAVKA10', 10, 'Скидка 10% на любой заказ'),
-        ('BEAUTY15', 'BEAUTY15', 15, 'Скидка 15% на бьюти-процедуры'),
-        ('STUDENT20', 'STUDENT20', 20, 'Скидка 20% для студентов')
-      ON CONFLICT (code) DO NOTHING
-    `);
+    
+    // Начальные 5 промокодов (включая специальный WELCOME25 на первый заказ)
+    const initialCoupons = [
+      ['WELCOME25', 'WELCOME25', 25, 'Скидка 25% только на первый заказ нового клиента', true],
+      ['LAVKA10', 'LAVKA10', 10, 'Скидка 10% на любые услуги салона', false],
+      ['BEAUTY15', 'BEAUTY15', 15, 'Скидка 15% на популярные бьюти-процедуры', false],
+      ['STUDENT20', 'STUDENT20', 20, 'Специальная скидка 20% для студентов', false],
+      ['VIP30', 'VIP30', 30, 'Эксклюзивная скидка 30% на премиальный комплекс', false]
+    ];
+
+    for (const [name, code, disc, desc, firstOnly] of initialCoupons) {
+      await db.query(`
+        INSERT INTO coupons (name, code, discount_percent, description, first_order_only, is_active)
+        VALUES ($1, $2, $3, $4, $5, true)
+        ON CONFLICT (code) DO UPDATE SET
+          discount_percent = EXCLUDED.discount_percent,
+          description = EXCLUDED.description,
+          first_order_only = EXCLUDED.first_order_only,
+          is_active = true
+      `, [name, code, disc, desc, firstOnly]);
+    }
 
     // 6. Cart Items (хранится в БД, привязана к пользователю)
     await db.query(`

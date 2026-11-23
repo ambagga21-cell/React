@@ -40,6 +40,7 @@ export default function AdminPanel({
   const [newCouponCode, setNewCouponCode] = useState('');
   const [newCouponDiscount, setNewCouponDiscount] = useState(10);
   const [newCouponDesc, setNewCouponDesc] = useState('');
+  const [newCouponFirstOnly, setNewCouponFirstOnly] = useState(false);
 
   // Модалка добавления/редактирования услуги (длительность в часах и минутах + скидка + склад)
   const [editingService, setEditingService] = useState(null);
@@ -161,11 +162,13 @@ export default function AdminPanel({
       await createCoupon({
         code: newCouponCode.trim().toUpperCase(),
         discount_percent: disc,
-        description: newCouponDesc.trim()
+        description: newCouponDesc.trim(),
+        first_order_only: newCouponFirstOnly
       });
       setNewCouponCode('');
       setNewCouponDiscount(10);
       setNewCouponDesc('');
+      setNewCouponFirstOnly(false);
       await loadCoupons();
       setPanelSuccess('Промокод успешно создан и готов к применению');
       setTimeout(() => setPanelSuccess(null), 3000);
@@ -1066,8 +1069,23 @@ export default function AdminPanel({
                               <tr key={cp.id}>
                                 <td>
                                   <strong style={{ color: 'var(--accent-color)' }}>{cp.code}</strong>
+                                  {cp.first_order_only && (
+                                    <div style={{ marginTop: '2px' }}>
+                                      <span style={{
+                                        display: 'inline-block',
+                                        fontSize: '10px',
+                                        background: '#fef3c7',
+                                        color: '#b45309',
+                                        padding: '1px 5px',
+                                        borderRadius: '4px',
+                                        fontWeight: 'bold'
+                                      }}>
+                                        ⭐ Только на 1-й заказ
+                                      </span>
+                                    </div>
+                                  )}
                                   {cp.description && (
-                                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                                       {cp.description}
                                     </div>
                                   )}
@@ -1157,7 +1175,19 @@ export default function AdminPanel({
                           onChange={(e) => setNewCouponDesc(e.target.value)}
                         />
                       </div>
-                      <button type="submit" className="btn btn-primary btn-sm" style={{ width: '100%' }}>
+                      <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '10px 0' }}>
+                        <input
+                          type="checkbox"
+                          id="firstOrderOnlyCheck"
+                          checked={newCouponFirstOnly}
+                          onChange={(e) => setNewCouponFirstOnly(e.target.checked)}
+                          style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                        />
+                        <label htmlFor="firstOrderOnlyCheck" style={{ margin: 0, fontSize: '13px', cursor: 'pointer' }}>
+                          Только на первый заказ нового клиента
+                        </label>
+                      </div>
+                      <button type="submit" className="btn btn-primary btn-sm" style={{ width: '100%', marginTop: '6px' }}>
                         + Создать промокод
                       </button>
                     </form>

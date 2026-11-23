@@ -80,15 +80,43 @@ router.post('/', async (req, res) => {
     let appliedCoupon = null;
     let discountAmount = 0;
     if (coupon_code && coupon_code.trim()) {
+      const codeUpper = coupon_code.trim().toUpperCase();
       const cRes = await db.query(
-        'SELECT code, discount_percent, is_active FROM coupons WHERE UPPER(code) = $1',
-        [coupon_code.trim().toUpperCase()]
+        'SELECT code, discount_percent, is_active, first_order_only FROM coupons WHERE UPPER(code) = $1',
+        [codeUpper]
       );
-      if (cRes.rows.length > 0 && cRes.rows[0].is_active) {
-        appliedCoupon = cRes.rows[0].code;
-        const discPercent = cRes.rows[0].discount_percent;
-        discountAmount = Math.round(subtotal * (discPercent / 100.0) * 100) / 100;
+      if (cRes.rows.length === 0 || !cRes.rows[0].is_active) {
+        return res.status(400).json({ error: 'Указанный промокод не найден или срок его действия истек' });
       }
+
+      // Проверка 1: не использовал ли пользователь уже этот промокод
+      const usedCheck = await db.query(
+        "SELECT id FROM orders WHERE user_id = $1 AND UPPER(coupon_code) = $2 AND status != 'Отменен'",
+        [req.user.id, codeUpper]
+      );
+      if (usedCheck.rows.length > 0) {
+        return res.status(400).json({
+          error: `Вы уже использовали промокод "${codeUpper}" в заказе №${usedCheck.rows[0].id}. Повторное использование запрещено.`
+        });
+      }
+
+      // Проверка 2: если промокод только на первый заказ
+      if (cRes.rows[0].first_order_only) {
+        const orderHistoryCheck = await db.query(
+          "SELECT COUNT(*)::int AS count FROM orders WHERE user_id = $1 AND status != 'Отменен'",
+          [req.user.id]
+        );
+        const prevCount = orderHistoryCheck.rows[0] ? orderHistoryCheck.rows[0].count : 0;
+        if (prevCount > 0) {
+          return res.status(400).json({
+            error: `Промокод "${codeUpper}" действует исключительно на первый заказ нового клиента.`
+          });
+        }
+      }
+
+      appliedCoupon = cRes.rows[0].code;
+      const discPercent = cRes.rows[0].discount_percent;
+      discountAmount = Math.round(subtotal * (discPercent / 100.0) * 100) / 100;
     }
 
     const finalTotalPrice = Math.max(0, subtotal - discountAmount);

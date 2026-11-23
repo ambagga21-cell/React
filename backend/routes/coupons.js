@@ -12,7 +12,7 @@ router.get('/validate/:code', async (req, res) => {
     }
 
     const result = await db.query(
-      'SELECT id, code, discount_percent, description, is_active FROM coupons WHERE UPPER(code) = $1',
+      'SELECT id, code, discount_percent, description, first_order_only, is_active FROM coupons WHERE UPPER(code) = $1',
       [code]
     );
 
@@ -25,11 +25,40 @@ router.get('/validate/:code', async (req, res) => {
       return res.status(400).json({ error: 'Срок действия данного промокода истек' });
     }
 
+    // Если запрос поступил от авторизованного пользователя, проверяем историю его заказов
+    if (req.user && req.user.id) {
+      // 1. Проверяем, не использовал ли пользователь уже этот промокод ранее
+      const usedCheck = await db.query(
+        "SELECT id FROM orders WHERE user_id = $1 AND UPPER(coupon_code) = $2 AND status != 'Отменен'",
+        [req.user.id, code]
+      );
+      if (usedCheck.rows.length > 0) {
+        return res.status(400).json({
+          error: `Вы уже использовали промокод "${code}" в заказе №${usedCheck.rows[0].id}. Повторно использовать один и тот же промокод нельзя.`
+        });
+      }
+
+      // 2. Если промокод только для первого заказа, проверяем наличие прошлых заказов
+      if (coupon.first_order_only) {
+        const orderHistoryCheck = await db.query(
+          "SELECT COUNT(*)::int AS count FROM orders WHERE user_id = $1 AND status != 'Отменен'",
+          [req.user.id]
+        );
+        const ordersCount = orderHistoryCheck.rows[0] ? orderHistoryCheck.rows[0].count : 0;
+        if (ordersCount > 0) {
+          return res.status(400).json({
+            error: `Промокод "${code}" действует только на первый заказ. У вас уже оформлено заказов: ${ordersCount} шт.`
+          });
+        }
+      }
+    }
+
     res.json({
       valid: true,
       code: coupon.code,
       discount_percent: coupon.discount_percent,
-      description: coupon.description
+      description: coupon.description,
+      first_order_only: coupon.first_order_only
     });
   } catch (error) {
     console.error('Ошибка проверки промокода:', error);
@@ -40,7 +69,7 @@ router.get('/validate/:code', async (req, res) => {
 // GET /api/coupons - Список всех промокодов (для админа)
 router.get('/', requireAdmin, async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM coupons ORDER BY id ASC');
+    const result = await db.query('SELECT * FROM coupons ORDER BY id DESC');
     res.json(result.rows);
   } catch (error) {
     console.error('Ошибка загрузки промокодов:', error);
@@ -51,7 +80,7 @@ router.get('/', requireAdmin, async (req, res) => {
 // POST /api/coupons - Создание нового промокода (для админа)
 router.post('/', requireAdmin, async (req, res) => {
   try {
-    const { code, discount_percent, description } = req.body;
+    const { code, discount_percent, description, first_order_only } = req.body;
     if (!code || !code.trim()) {
       return res.status(400).json({ error: 'Название промокода обязательно' });
     }
@@ -61,10 +90,10 @@ router.post('/', requireAdmin, async (req, res) => {
     }
 
     const result = await db.query(`
-      INSERT INTO coupons (code, name, discount_percent, description, is_active)
-      VALUES ($1, $1, $2, $3, true)
+      INSERT INTO coupons (code, name, discount_percent, description, first_order_only, is_active)
+      VALUES ($1, $1, $2, $3, $4, true)
       RETURNING *
-    `, [code.trim().toUpperCase(), disc, description ? description.trim() : '']);
+    `, [code.trim().toUpperCase(), disc, description ? description.trim() : '', Boolean(first_order_only)]);
 
     res.status(201).json(result.rows[0]);
   } catch (error) {

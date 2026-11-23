@@ -629,6 +629,76 @@ async function deleteReview(reviewId) {
 }
 
 
+// API: coupons.js
+const COUPONS_API_URL = 'http://localhost:3001/api/coupons';
+
+
+
+// Проверка и расчет скидки по промокоду
+async function validateCoupon(code) {
+  const response = await fetch(`${COUPONS_API_URL}/validate/${encodeURIComponent(code)}`, {
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Ошибка проверки промокода');
+  }
+  return data;
+}
+
+// Получение всех промокодов (для админа)
+async function getCoupons() {
+  const response = await fetch(COUPONS_API_URL, {
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Не удалось получить промокоды');
+  }
+  return data;
+}
+
+// Создание промокода (для админа)
+async function createCoupon(data) {
+  const response = await fetch(COUPONS_API_URL, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(data)
+  });
+  const resData = await response.json();
+  if (!response.ok) {
+    throw new Error(resData.error || 'Не удалось создать промокод');
+  }
+  return resData;
+}
+
+// Удаление промокода (для админа)
+async function deleteCoupon(id) {
+  const response = await fetch(`${COUPONS_API_URL}/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Не удалось удалить промокод');
+  }
+  return data;
+}
+
+// Переключение активности промокода (вкл/пауза)
+async function toggleCoupon(id) {
+  const response = await fetch(`${COUPONS_API_URL}/${id}/toggle`, {
+    method: 'PUT',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Не удалось обновить промокод');
+  }
+  return data;
+}
+
+
 // Component: Navbar.jsx
 // Компонент навигационной панели
 function Navbar({
@@ -2777,6 +2847,7 @@ function AdminPanel({
   const [newCouponCode, setNewCouponCode] = useState('');
   const [newCouponDiscount, setNewCouponDiscount] = useState(10);
   const [newCouponDesc, setNewCouponDesc] = useState('');
+  const [newCouponFirstOnly, setNewCouponFirstOnly] = useState(false);
 
   // Модалка добавления/редактирования услуги (длительность в часах и минутах + скидка + склад)
   const [editingService, setEditingService] = useState(null);
@@ -2886,11 +2957,13 @@ function AdminPanel({
       await createCoupon({
         code: newCouponCode.trim().toUpperCase(),
         discount_percent: disc,
-        description: newCouponDesc.trim()
+        description: newCouponDesc.trim(),
+        first_order_only: newCouponFirstOnly
       });
       setNewCouponCode('');
       setNewCouponDiscount(10);
       setNewCouponDesc('');
+      setNewCouponFirstOnly(false);
       await loadCoupons();
       setPanelSuccess('Промокод успешно создан и готов к применению');
       setTimeout(() => setPanelSuccess(null), 3000);
@@ -3692,10 +3765,25 @@ function AdminPanel({
       style: {
         color: 'var(--accent-color)'
       }
-    }, cp.code), cp.description && /*#__PURE__*/React.createElement("div", {
+    }, cp.code), cp.first_order_only && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: '2px'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: 'inline-block',
+        fontSize: '10px',
+        background: '#fef3c7',
+        color: '#b45309',
+        padding: '1px 5px',
+        borderRadius: '4px',
+        fontWeight: 'bold'
+      }
+    }, "\u2B50 \u0422\u043E\u043B\u044C\u043A\u043E \u043D\u0430 1-\u0439 \u0437\u0430\u043A\u0430\u0437")), cp.description && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: '11px',
-        color: 'var(--text-secondary)'
+        color: 'var(--text-secondary)',
+        marginTop: '2px'
       }
     }, cp.description)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
       className: "badge-discount",
@@ -3773,11 +3861,37 @@ function AdminPanel({
       placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0421\u043A\u0438\u0434\u043A\u0430 15% \u0434\u043B\u044F \u043D\u043E\u0432\u044B\u0445 \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432",
       value: newCouponDesc,
       onChange: e => setNewCouponDesc(e.target.value)
-    })), /*#__PURE__*/React.createElement("button", {
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "form-group",
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        margin: '10px 0'
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      id: "firstOrderOnlyCheck",
+      checked: newCouponFirstOnly,
+      onChange: e => setNewCouponFirstOnly(e.target.checked),
+      style: {
+        cursor: 'pointer',
+        width: '16px',
+        height: '16px'
+      }
+    }), /*#__PURE__*/React.createElement("label", {
+      htmlFor: "firstOrderOnlyCheck",
+      style: {
+        margin: 0,
+        fontSize: '13px',
+        cursor: 'pointer'
+      }
+    }, "\u0422\u043E\u043B\u044C\u043A\u043E \u043D\u0430 \u043F\u0435\u0440\u0432\u044B\u0439 \u0437\u0430\u043A\u0430\u0437 \u043D\u043E\u0432\u043E\u0433\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u0430")), /*#__PURE__*/React.createElement("button", {
       type: "submit",
       className: "btn btn-primary btn-sm",
       style: {
-        width: '100%'
+        width: '100%',
+        marginTop: '6px'
       }
     }, "+ \u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043F\u0440\u043E\u043C\u043E\u043A\u043E\u0434")))));
   })(), activeTab === 'reviews' && (() => {

@@ -84,7 +84,7 @@ function bundle() {
   }
 
   // 1. Считываем API файлы
-  const apiFiles = ['auth.js', 'services.js', 'categories.js', 'cart.js', 'orders.js', 'reviews.js', 'admin.js'];
+  const apiFiles = ['auth.js', 'services.js', 'categories.js', 'cart.js', 'orders.js', 'reviews.js', 'admin.js', 'coupons.js'];
   for (const file of apiFiles) {
     const fPath = path.join(apiDir, file);
     if (fs.existsSync(fPath)) {
