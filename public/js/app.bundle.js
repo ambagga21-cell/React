@@ -1163,6 +1163,10 @@ function ReviewsModal({
   };
   const handleSubmit = async e => {
     e.preventDefault();
+    if (user?.role === 'admin') {
+      alert('Администратор не может оставлять отзывы к услугам.');
+      return;
+    }
     if (!comment.trim() || comment.trim().length < 3) {
       alert('Пожалуйста, напишите отзыв (не менее 3 символов)');
       return;
@@ -1358,7 +1362,22 @@ function ReviewsModal({
       fontSize: '15px',
       marginBottom: '10px'
     }
-  }, "\u041E\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043E\u0442\u0437\u044B\u0432"), user ? /*#__PURE__*/React.createElement("form", {
+  }, "\u041E\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043E\u0442\u0437\u044B\u0432"), user?.role === 'admin' ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'rgba(239, 68, 68, 0.08)',
+      border: '1px solid rgba(239, 68, 68, 0.25)',
+      padding: '14px',
+      borderRadius: '8px',
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '13px',
+      color: '#ef4444',
+      margin: 0,
+      fontWeight: 500
+    }
+  }, "\u26A0\uFE0F \u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440 \u043D\u0435 \u043C\u043E\u0436\u0435\u0442 \u043E\u0441\u0442\u0430\u0432\u043B\u044F\u0442\u044C \u043E\u0442\u0437\u044B\u0432\u044B \u043A \u0443\u0441\u043B\u0443\u0433\u0430\u043C. \u041E\u0442\u0437\u044B\u0432\u044B \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B \u0442\u043E\u043B\u044C\u043A\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u0430\u043C \u0441\u0430\u043B\u043E\u043D\u0430.")) : user ? /*#__PURE__*/React.createElement("form", {
     onSubmit: handleSubmit
   }, submitSuccess && /*#__PURE__*/React.createElement("div", {
     style: {

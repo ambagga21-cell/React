@@ -47,6 +47,10 @@ export default function ReviewsModal({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (user?.role === 'admin') {
+      alert('Администратор не может оставлять отзывы к услугам.');
+      return;
+    }
     if (!comment.trim() || comment.trim().length < 3) {
       alert('Пожалуйста, напишите отзыв (не менее 3 символов)');
       return;
@@ -212,7 +216,19 @@ export default function ReviewsModal({
           <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
             <h4 style={{ fontSize: '15px', marginBottom: '10px' }}>Оставить отзыв</h4>
 
-            {user ? (
+            {user?.role === 'admin' ? (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                padding: '14px',
+                borderRadius: '8px',
+                textAlign: 'center'
+              }}>
+                <p style={{ fontSize: '13px', color: '#ef4444', margin: 0, fontWeight: 500 }}>
+                  ⚠️ Администратор не может оставлять отзывы к услугам. Отзывы доступны только клиентам салона.
+                </p>
+              </div>
+            ) : user ? (
               <form onSubmit={handleSubmit}>
                 {submitSuccess && (
                   <div style={{ padding: '8px', background: 'var(--success-bg)', color: 'var(--success-color)', borderRadius: '6px', fontSize: '13px', marginBottom: '10px' }}>

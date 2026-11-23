@@ -48,9 +48,14 @@ router.get('/service/:service_id', async (req, res) => {
   }
 });
 
-// POST /api/reviews - Добавление отзыва (только для авторизованных пользователей)
+// POST /api/reviews - Добавление отзыва (только для авторизованных клиентов, админам запрещено)
 router.post('/', requireAuth, async (req, res) => {
   try {
+    // Администратор не может оставлять отзывы к услугам
+    if (req.user && req.user.role === 'admin') {
+      return res.status(403).json({ error: 'Администратор не может оставлять отзывы к услугам' });
+    }
+
     const { service_id, rating, comment } = req.body;
 
     if (!service_id) {
