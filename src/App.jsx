@@ -297,7 +297,6 @@ export default function App() {
 
   return (
     <div className="app-root">
-      {/* Навигационная панель */}
       <Navbar
         user={user}
         cartCount={cartCount}
@@ -312,7 +311,6 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Информационный баннер */}
       <div className="main-container">
         <div className="banner-info">
           <div>
@@ -323,7 +321,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Каталог услуг */}
         <Catalog
           services={services}
           categories={categories}
@@ -342,13 +339,11 @@ export default function App() {
         />
       </div>
 
-      {/* Подвал сайта */}
       <footer>
         <p>Информационная система онлайн-заказа услуг и товаров «Лавка Услуг» © 2026</p>
         <p style={{ fontSize: '12px', marginTop: '4px' }}>Курсовой проект по React и серверным API. PostgreSQL 18 & Express.</p>
       </footer>
 
-      {/* Модальное окно авторизации и регистрации */}
       <AuthModal
         isOpen={currentPath === '/login' || currentPath === '/auth'}
         onClose={() => navigate('/')}
@@ -356,14 +351,12 @@ export default function App() {
         onOpenForgotPassword={() => navigate('/forgot-password')}
       />
 
-      {/* Модальное окно восстановления пароля */}
       <ForgotPasswordModal
         isOpen={currentPath === '/forgot-password' || currentPath === '/forgot'}
         onClose={() => navigate('/')}
         onOpenAuth={() => navigate('/login')}
       />
 
-      {/* Модальное окно корзины - доступно только клиентам, скрыто для администратора */}
       {user?.role !== 'admin' && (
         <CartModal
           isOpen={currentPath === '/cart'}
@@ -380,7 +373,6 @@ export default function App() {
         />
       )}
 
-      {/* Модальное окно оформления заказа - только для клиентов */}
       {user?.role !== 'admin' && (
         <CheckoutModal
           isOpen={currentPath === '/checkout'}
@@ -392,7 +384,6 @@ export default function App() {
         />
       )}
 
-      {/* Модальное окно отзывов */}
       <ReviewsModal
         service={reviewsService}
         user={user}
@@ -402,7 +393,6 @@ export default function App() {
         onReviewAdded={loadServicesList}
       />
 
-      {/* Модальное окно личного кабинета */}
       <ProfileModal
         isOpen={currentPath === '/profile'}
         onClose={() => navigate('/')}
@@ -410,7 +400,6 @@ export default function App() {
         onProfileUpdated={(updated) => setUser(updated)}
       />
 
-      {/* Панель администратора */}
       <AdminPanel
         isOpen={currentPath === '/admin' && user?.role === 'admin'}
         onClose={() => navigate('/')}

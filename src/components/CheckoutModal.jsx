@@ -133,7 +133,6 @@ export default function CheckoutModal({
               </div>
             )}
 
-            {/* Сводка заказа */}
             <div style={{
               background: 'rgba(0,0,0,0.03)',
               padding: '12px 16px',
@@ -160,7 +159,6 @@ export default function CheckoutModal({
               </div>
             </div>
 
-            {/* Промокод */}
             <div className="form-group" style={{ marginBottom: '16px' }}>
               <label>Промокод на скидку:</label>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -197,7 +195,6 @@ export default function CheckoutModal({
               </span>
             </div>
 
-            {/* Поле: Адрес доставки */}
             <div className="form-group">
               <label>Адрес доставки / выезда мастера:</label>
               <input
@@ -213,7 +210,6 @@ export default function CheckoutModal({
               </span>
             </div>
 
-            {/* Поле: Дата доставки (валидация min=today) */}
             <div className="form-group">
               <label>Дата доставки / оказания услуги:</label>
               <input

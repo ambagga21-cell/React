@@ -45,7 +45,6 @@ export default function Catalog({
 
   return (
     <div className="catalog-layout">
-      {/* Боковая панель категорий */}
       <aside className="filters-sidebar">
         <div className="filters-header">
           <h2>Категории услуг</h2>
@@ -62,7 +61,6 @@ export default function Catalog({
         </div>
 
         <div>
-          {/* Пункт Все категории */}
           <div
             className={`category-filter-item ${selectedCategory === 'all' ? 'active' : ''}`}
             onClick={() => onSelectCategory('all')}
@@ -71,7 +69,6 @@ export default function Catalog({
             <span className="count-badge">{safeServices.length}</span>
           </div>
 
-          {/* Категории из базы данных */}
           {safeCategories.map((cat) => (
             <div
               key={cat.id || cat.name}
@@ -83,7 +80,6 @@ export default function Catalog({
             </div>
           ))}
 
-          {/* Категория «Без категории» — отображается всегда */}
           {!safeCategories.some((c) => c.name === 'Без категории') && (
             <div
               className={`category-filter-item ${selectedCategory === 'Без категории' ? 'active' : ''}`}
@@ -97,7 +93,6 @@ export default function Catalog({
           )}
         </div>
 
-        {/* Дополнительный фильтр по цене */}
         <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
           <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>Фильтр по цене (₽)</h3>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -131,9 +126,7 @@ export default function Catalog({
         </div>
       </aside>
 
-      {/* Основная часть каталога */}
       <section>
-        {/* Панель поиска и сортировки */}
         <div className="catalog-controls">
           <input
             type="text"
@@ -154,7 +147,6 @@ export default function Catalog({
             <option value="rating">По рейтингу отзывов</option>
           </select>
 
-          {/* Фильтр по акциям и скидкам */}
           <label style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -184,7 +176,6 @@ export default function Catalog({
           </div>
         </div>
 
-        {/* Состояние ошибки (сервер backend недоступен) */}
         {error && (
           <div className="server-error-banner">
             <h3>Ошибка: сервер backend недоступен</h3>
@@ -199,14 +190,12 @@ export default function Catalog({
           </div>
         )}
 
-        {/* Состояние загрузки */}
         {loading && !error && (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)' }}>
             <p>Загрузка каталога услуг из базы данных PostgreSQL...</p>
           </div>
         )}
 
-        {/* Список услуг */}
         {!loading && !error && filteredServices.length > 0 && (
           <div className="services-grid">
             {filteredServices.map((service) => (
@@ -221,7 +210,6 @@ export default function Catalog({
           </div>
         )}
 
-        {/* Пустой результат поиска */}
         {!loading && !error && filteredServices.length === 0 && (
           <div style={{
             background: 'var(--card-bg)',

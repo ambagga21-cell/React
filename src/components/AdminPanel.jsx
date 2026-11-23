@@ -508,7 +508,6 @@ export default function AdminPanel({
         </div>
 
         <div className="modal-body">
-          {/* Навигация панели админа */}
           <div className="tabs-nav">
             <button
               type="button"
@@ -554,7 +553,6 @@ export default function AdminPanel({
             </button>
           </div>
 
-          {/* Информационные плашки об ошибках и успехе (без всплывающих alert) */}
           {panelError && (
             <div style={{
               background: 'rgba(239, 68, 68, 0.15)',
@@ -601,7 +599,6 @@ export default function AdminPanel({
             </div>
           )}
 
-          {/* Вкладка 1: Заказы (с отображением x2, x3 для повторяющихся услуг) */}
           {activeTab === 'orders' && (() => {
             const filteredOrders = orders.filter((o) => {
               if (!orderSearch.trim()) return true;
@@ -671,7 +668,6 @@ export default function AdminPanel({
                             <td>{o.delivery_address}</td>
                             <td>{new Date(o.delivery_date).toLocaleDateString('ru-RU')}</td>
                             <td>
-                              {/* Отображение услуг с группировкой x2, x3 */}
                               <span style={{ fontSize: '13px', color: 'var(--accent-color)', fontWeight: '500' }}>
                                 {o.items_summary}
                               </span>
@@ -752,7 +748,6 @@ export default function AdminPanel({
             );
           })()}
 
-          {/* Вкладка 2: Управление услугами */}
           {activeTab === 'services' && (() => {
             const filteredServices = services.filter((s) => {
               if (!serviceSearch.trim()) return true;
@@ -894,7 +889,6 @@ export default function AdminPanel({
             );
           })()}
 
-          {/* Вкладка 3: Категории */}
           {activeTab === 'categories' && (() => {
             const filteredCategories = categories.filter((c) => {
               if (!catSearch.trim()) return true;
@@ -919,7 +913,6 @@ export default function AdminPanel({
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
-                  {/* Список существующих категорий */}
                   <div>
                     <h4 style={{ fontSize: '15px', marginBottom: '12px' }}>
                       Существующие категории ({categories.length})
@@ -977,7 +970,6 @@ export default function AdminPanel({
                     </table>
                   </div>
 
-                  {/* Форма добавления новой категории */}
                   <div style={{ background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', height: 'fit-content' }}>
                     <h4 style={{ fontSize: '15px', marginBottom: '12px' }}>Добавить категорию</h4>
                     <form onSubmit={handleAddCategory}>
@@ -1012,7 +1004,6 @@ export default function AdminPanel({
             );
           })()}
 
-          {/* Вкладка: Управление промокодами и купонами */}
           {activeTab === 'coupons' && (() => {
             const filteredCoupons = coupons.filter((c) => {
               if (!couponSearch.trim()) return true;
@@ -1038,7 +1029,6 @@ export default function AdminPanel({
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
-                  {/* Список существующих промокодов */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                       <h4 style={{ fontSize: '15px' }}>
@@ -1137,7 +1127,6 @@ export default function AdminPanel({
                     )}
                   </div>
 
-                  {/* Форма создания нового промокода */}
                   <div style={{ background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', height: 'fit-content' }}>
                     <h4 style={{ fontSize: '15px', marginBottom: '12px' }}>Создать промокод</h4>
                     <form onSubmit={handleCreateCoupon}>
@@ -1197,7 +1186,6 @@ export default function AdminPanel({
             );
           })()}
 
-          {/* Вкладка 4: Модерация отзывов */}
           {activeTab === 'reviews' && (() => {
             const filteredReviews = reviews.filter((r) => {
               if (revRating !== 'all' && Number(r.rating) !== Number(revRating)) {
@@ -1224,7 +1212,6 @@ export default function AdminPanel({
                   </button>
                 </div>
 
-                {/* Поиск и фильтрация отзывов по оценкам */}
                 <div style={{
                   display: 'flex',
                   gap: '10px',
@@ -1247,7 +1234,6 @@ export default function AdminPanel({
                     />
                   </div>
 
-                  {/* Быстрые фильтры по оценкам (звездам) */}
                   <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Оценка:</span>
                     {['all', '5', '4', '3', '2', '1'].map((rate) => {
@@ -1345,7 +1331,6 @@ export default function AdminPanel({
             );
           })()}
 
-          {/* Вкладка 5: Пользователи */}
           {activeTab === 'users' && (() => {
             const filteredUsers = users.filter((u) => {
               if (!userSearch.trim()) return true;
@@ -1468,7 +1453,6 @@ export default function AdminPanel({
         </div>
       </div>
 
-      {/* Вложенная модалка добавления / редактирования услуги */}
       {isServiceModalOpen && (
         <div className="modal-overlay" style={{ zIndex: 1100 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1586,7 +1570,6 @@ export default function AdminPanel({
                   </div>
                 </div>
 
-                {/* Сообщение об ошибке недопустимой скидки прямо под полем */}
                 {sDiscount !== '' && (Number(sDiscount) < 0 || Number(sDiscount) >= 100) && (
                   <div style={{
                     padding: '8px 12px',
@@ -1604,7 +1587,6 @@ export default function AdminPanel({
                   </div>
                 )}
 
-                {/* Предпросмотр цены с учетом валидной скидки */}
                 {Number(sPrice) > 0 && Number(sDiscount) > 0 && Number(sDiscount) <= 99 && (
                   <div style={{
                     padding: '8px 12px',
@@ -1629,7 +1611,6 @@ export default function AdminPanel({
                   </div>
                 )}
 
-                {/* Выбор длительности: часы и минуты (максимум 6 часов работы мастера) */}
                 <div className="form-group">
                   <label>Длительность услуги (максимум 6 часов работы мастера):</label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1718,7 +1699,6 @@ export default function AdminPanel({
                     )}
                   </div>
 
-                  {/* Предпросмотр изображения прямо в модалке редактирования */}
                   {sImg && (
                     <div style={{
                       marginTop: '10px',
@@ -1759,7 +1739,6 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* Вложенная модалка редактирования категории */}
       {isEditCatModalOpen && (
         <div className="modal-overlay" style={{ zIndex: 1100 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>

@@ -15,7 +15,6 @@ export default function Navbar({
   return (
     <header className="header-wrapper">
       <div className="header-container">
-        {/* Логотип и название ИС */}
         <div
           className="header-logo"
           onClick={() => {
@@ -28,9 +27,7 @@ export default function Navbar({
           <h1>Салон-магазин «Лавка Услуг»</h1>
         </div>
 
-        {/* Действия и навигация */}
         <div className="header-actions">
-          {/* Переключатель темы оформления */}
           <button
             type="button"
             className="btn btn-outline btn-sm"
@@ -40,7 +37,6 @@ export default function Navbar({
             {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
           </button>
 
-          {/* Авторизованный пользователь или кнопка входа */}
           {user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className={`badge ${user.role === 'admin' ? 'badge-admin' : 'badge-user'}`}>
@@ -51,7 +47,6 @@ export default function Navbar({
                 {user.name}
               </span>
 
-              {/* Личный кабинет */}
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
@@ -61,7 +56,6 @@ export default function Navbar({
                 Личный кабинет
               </button>
 
-              {/* Панель администратора (доступна только для роли admin) */}
               {user.role === 'admin' && (
                 <button
                   type="button"
@@ -73,7 +67,6 @@ export default function Navbar({
                 </button>
               )}
 
-              {/* Кнопка выхода из системы */}
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
@@ -94,7 +87,6 @@ export default function Navbar({
             </button>
           )}
 
-          {/* Кнопка корзины - скрыта для администратора */}
           {user?.role !== 'admin' && (
             <button
               type="button"

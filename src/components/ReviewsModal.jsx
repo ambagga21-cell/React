@@ -104,13 +104,10 @@ export default function ReviewsModal({
         </div>
 
         <div className="modal-body">
-          {/* Состояние загрузки */}
           {loading && <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Загрузка отзывов...</p>}
 
-          {/* Состояние ошибки */}
           {error && <p style={{ color: 'var(--danger-color)', textAlign: 'center' }}>{error}</p>}
 
-          {/* Панель поиска и фильтрации по оценкам */}
           {!loading && reviews.length > 0 && (
             <div style={{
               background: 'rgba(0,0,0,0.02)',
@@ -140,7 +137,6 @@ export default function ReviewsModal({
                 )}
               </div>
 
-              {/* Кнопки фильтрации по оценкам */}
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Оценка:</span>
                 {['all', '5', '4', '3', '2', '1'].map((rate) => {
@@ -171,7 +167,6 @@ export default function ReviewsModal({
             </div>
           )}
 
-          {/* Список отзывов */}
           {!loading && reviews.length === 0 && (
             <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '20px 0' }}>
               Пока нет отзывов на эту услугу.
@@ -212,7 +207,6 @@ export default function ReviewsModal({
             </div>
           )}
 
-          {/* Форма добавления отзыва */}
           <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
             <h4 style={{ fontSize: '15px', marginBottom: '10px' }}>Оставить отзыв</h4>
 

@@ -54,7 +54,6 @@ export default function CartModal({
         </div>
 
         <div className="modal-body">
-          {/* Если пользователь не авторизован */}
           {!user && (
             <div style={{
               background: 'var(--warning-bg)',
@@ -81,7 +80,6 @@ export default function CartModal({
             </div>
           )}
 
-          {/* Пустая корзина */}
           {cartItems.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
               <h4>В вашей корзине пока ничего нет</h4>
@@ -97,7 +95,6 @@ export default function CartModal({
             </div>
           ) : (
             <div>
-              {/* Список позиций в корзине */}
               <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
                 {cartItems.map((item) => (
                   <div key={item.service_id} className="cart-item-row">
@@ -137,7 +134,6 @@ export default function CartModal({
                       </div>
                     </div>
 
-                    {/* Управление количеством */}
                     <div className="cart-qty-controls">
                       <button
                         type="button"
@@ -186,12 +182,10 @@ export default function CartModal({
                       })()}
                     </div>
 
-                    {/* Стоимость позиции */}
                     <div style={{ minWidth: '90px', textAlign: 'right', fontWeight: 'bold' }}>
                       {formatPrice(item.item_total)}
                     </div>
 
-                    {/* Кнопка удаления */}
                     <button
                       type="button"
                       className="btn btn-sm"
@@ -205,7 +199,6 @@ export default function CartModal({
                 ))}
               </div>
 
-              {/* Итоговая сумма корзины */}
               <div style={{
                 marginTop: '20px',
                 paddingTop: '16px',

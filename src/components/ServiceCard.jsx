@@ -34,7 +34,6 @@ export default function ServiceCard({
       />
 
       <div className="service-card-body">
-        {/* Категория (получена через JOIN), длительность и скидочный бейдж */}
         <div className="service-card-meta">
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{
@@ -58,13 +57,10 @@ export default function ServiceCard({
           </span>
         </div>
 
-        {/* Название услуги */}
         <h3 className="service-card-title">{service.name}</h3>
 
-        {/* Описание */}
         <p className="service-card-desc">{service.description}</p>
 
-        {/* Рейтинг, отзывы и наличие на складе */}
         <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
           <button
             type="button"
@@ -84,7 +80,6 @@ export default function ServiceCard({
           </span>
         </div>
 
-        {/* Нижняя планка: цена (старая перечеркнута, новая выделена) и кнопка заказа */}
         <div className="service-card-footer">
           <div className="service-price">
             {discountPercent > 0 ? (

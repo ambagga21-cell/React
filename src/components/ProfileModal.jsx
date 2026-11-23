@@ -148,7 +148,6 @@ export default function ProfileModal({
         </div>
 
         <div className="modal-body">
-          {/* Навигация по вкладкам кабинета */}
           <div className="tabs-nav">
             <button
               type="button"
@@ -173,7 +172,6 @@ export default function ProfileModal({
             </button>
           </div>
 
-          {/* Вкладка 1: История заказов */}
           {activeTab === 'orders' && (
             <div>
               {ordersLoading && <p style={{ textAlign: 'center', padding: '20px' }}>Загрузка заказов...</p>}
@@ -241,7 +239,6 @@ export default function ProfileModal({
             </div>
           )}
 
-          {/* Вкладка 2: Редактирование личных данных */}
           {activeTab === 'info' && (
             <form onSubmit={handleInfoSubmit} style={{ maxWidth: '480px', margin: '0 auto' }}>
               {infoMsg && (
@@ -316,7 +313,6 @@ export default function ProfileModal({
             </form>
           )}
 
-          {/* Вкладка 3: Смена пароля */}
           {activeTab === 'security' && (
             <form onSubmit={handlePasswordSubmit} style={{ maxWidth: '480px', margin: '0 auto' }}>
               {pwdMsg && (
