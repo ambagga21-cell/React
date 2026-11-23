@@ -188,11 +188,14 @@ async function initDatabase() {
       VALUES 
         ($1, 'Администратор салона', 'admin@lavka.ru', $3, '+7 (999) 111-22-33', 'г. Москва, ул. Тверская, д. 12', 'Любимый цвет', 'синий'),
         ($2, 'Александр Иванов', 'user@lavka.ru', $3, '+7 (999) 777-88-99', 'г. Москва, пр-т Мира, д. 25, кв. 42', 'Кличка первого питомца', 'Барсик'),
-        ($2, 'Александр (Студент)', 'ambagga21@gmail.com', $3, '+7 (999) 888-21-21', 'г. Москва, ул. Арбат, д. 21', 'Любимый цвет', 'синий')
+        ($2, 'Александр (Студент)', 'ambagga21@gmail.com', $3, '+7 (999) 888-21-21', 'г. Москва, ул. Арбат, д. 21', 'Любимый цвет', 'синий'),
+        ($2, 'Елена Смирнова', 'newuser_1795420815683@lavka.ru', $3, '+7 (916) 789-01-23', 'г. Москва, Ленинский пр-т, д. 14', 'Любимый цвет', 'зеленый'),
+        ($2, 'Дмитрий Соколов', 'newuser_1795420848937@lavka.ru', $3, '+7 (925) 345-67-89', 'г. Москва, ул. Новый Арбат, д. 8', 'Любимый цвет', 'синий')
       ON CONFLICT (email) DO UPDATE SET 
         role_id = EXCLUDED.role_id,
+        name = EXCLUDED.name,
         password_hash = EXCLUDED.password_hash,
-        phone = CASE WHEN users.phone IS NULL OR users.phone = '12345' OR length(regexp_replace(users.phone, '\D', '', 'g')) < 11 THEN EXCLUDED.phone ELSE users.phone END,
+        phone = EXCLUDED.phone,
         default_address = COALESCE(users.default_address, EXCLUDED.default_address),
         security_question = COALESCE(users.security_question, EXCLUDED.security_question),
         security_answer = COALESCE(users.security_answer, EXCLUDED.security_answer)
