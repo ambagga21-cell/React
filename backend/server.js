@@ -83,13 +83,44 @@ app.get('/', (req, res) => {
 
 let serverInstance = null;
 
+function freePort(port) {
+  try {
+    const { execSync } = require('child_process');
+    if (process.platform === 'win32') {
+      execSync(`powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"`, { stdio: 'ignore' });
+    } else {
+      execSync(`lsof -ti:${port} | xargs kill -9`, { stdio: 'ignore' });
+    }
+  } catch (e) {
+    // игнорируем ошибку если порт уже свободен
+  }
+}
+
 async function start() {
   await initDatabase();
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (serverInstance) return resolve(serverInstance);
-    serverInstance = app.listen(PORT, () => {
+
+    const s = app.listen(PORT);
+    s.on('listening', () => {
+      serverInstance = s;
       console.log(`Backend running on http://localhost:${PORT}`);
       resolve(serverInstance);
+    });
+
+    s.on('error', async (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.warn(`[Server] Порт ${PORT} занят другим процессом. Автоматически освобождаем порт...`);
+        freePort(PORT);
+        await new Promise(r => setTimeout(r, 600));
+        serverInstance = app.listen(PORT, () => {
+          console.log(`Backend running on http://localhost:${PORT}`);
+          resolve(serverInstance);
+        });
+      } else {
+        console.error('Ошибка запуска сервера:', err);
+        reject(err);
+      }
     });
   });
 }
