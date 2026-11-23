@@ -57,8 +57,12 @@ async function main() {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: ''
+    prompt: '',
+    terminal: false
   });
+
+  // Предотвращаем закрытие процесса при завершении потока ввода (например, в фоне)
+  setInterval(() => {}, 1000 * 60 * 60);
 
   rl.on('line', async (line) => {
     const cmd = line.trim().toLowerCase();
