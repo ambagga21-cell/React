@@ -17,3 +17,17 @@ export async function createCoupon(data) {
     body: JSON.stringify(data)
   });
 }
+
+// Удаление промокода (для админа)
+export async function deleteCoupon(id) {
+  return await apiRequest(`/coupons/${id}`, {
+    method: 'DELETE'
+  });
+}
+
+// Переключение активности промокода
+export async function toggleCoupon(id) {
+  return await apiRequest(`/coupons/${id}/toggle`, {
+    method: 'PUT'
+  });
+}

@@ -76,4 +76,37 @@ router.post('/', requireAdmin, async (req, res) => {
   }
 });
 
+// DELETE /api/coupons/:id - Удаление промокода (для админа)
+router.delete('/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query('DELETE FROM coupons WHERE id = $1 RETURNING id', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Промокод не найден' });
+    }
+    res.json({ message: 'Промокод успешно удален' });
+  } catch (error) {
+    console.error('Ошибка удаления промокода:', error);
+    res.status(500).json({ error: 'Не удалось удалить промокод' });
+  }
+});
+
+// PUT /api/coupons/:id/toggle - Включение/отключение промокода (для админа)
+router.put('/:id/toggle', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(
+      'UPDATE coupons SET is_active = NOT is_active WHERE id = $1 RETURNING *',
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Промокод не найден' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Ошибка изменения статуса промокода:', error);
+    res.status(500).json({ error: 'Не удалось обновить промокод' });
+  }
+});
+
 module.exports = router;

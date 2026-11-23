@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getAdminStats, getAdminOrders, updateOrderStatus, deleteOrder, getAdminUsers, updateUserRole, deleteUser, getAdminReviews, deleteReview } from '../api/admin';
 import { createService, updateService, deleteService } from '../api/services';
 import { createCategory, updateCategory, deleteCategory } from '../api/categories';
+import { getCoupons, createCoupon, deleteCoupon, toggleCoupon } from '../api/coupons';
 import { formatDuration, formatPrice, calculateFinalPrice } from '../utils/formatters';
 import { formatPhoneNumber } from '../api/auth';
 
@@ -15,13 +16,14 @@ export default function AdminPanel({
   onCategoriesChanged,
   currentUser
 }) {
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'services' | 'categories' | 'reviews' | 'users'
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'services' | 'categories' | 'coupons' | 'reviews' | 'users'
   const [stats, setStats] = useState(null);
 
   // Списки данных
   const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [panelError, setPanelError] = useState(null);
   const [panelSuccess, setPanelSuccess] = useState(null);
@@ -31,7 +33,13 @@ export default function AdminPanel({
   const [orderSearch, setOrderSearch] = useState('');
   const [serviceSearch, setServiceSearch] = useState('');
   const [catSearch, setCatSearch] = useState('');
+  const [couponSearch, setCouponSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
+
+  // Форма добавления нового промокода
+  const [newCouponCode, setNewCouponCode] = useState('');
+  const [newCouponDiscount, setNewCouponDiscount] = useState(10);
+  const [newCouponDesc, setNewCouponDesc] = useState('');
 
   // Модалка добавления/редактирования услуги (длительность в часах и минутах + скидка + склад)
   const [editingService, setEditingService] = useState(null);
@@ -72,7 +80,8 @@ export default function AdminPanel({
         loadStats(),
         loadOrders(),
         loadUsers(),
-        loadReviews()
+        loadReviews(),
+        loadCoupons()
       ]);
     } catch (e) {
       console.warn('Ошибка загрузки данных админ-панели:', e.message);
@@ -123,6 +132,72 @@ export default function AdminPanel({
     } catch (e) {
       console.error('Reviews load error:', e);
       setPanelError(e.message || 'Ошибка получения отзывов');
+    }
+  };
+
+  const loadCoupons = async () => {
+    try {
+      const data = await getCoupons();
+      setCoupons(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Coupons load error:', e);
+    }
+  };
+
+  // Создание промокода
+  const handleCreateCoupon = async (e) => {
+    e.preventDefault();
+    if (!newCouponCode.trim()) {
+      setPanelError('Укажите код промокода');
+      return;
+    }
+    const disc = parseInt(newCouponDiscount, 10);
+    if (isNaN(disc) || disc <= 0 || disc > 99) {
+      setPanelError('Скидка по промокоду должна быть целым числом в диапазоне от 1 до 99%');
+      return;
+    }
+    try {
+      setPanelError(null);
+      await createCoupon({
+        code: newCouponCode.trim().toUpperCase(),
+        discount_percent: disc,
+        description: newCouponDesc.trim()
+      });
+      setNewCouponCode('');
+      setNewCouponDiscount(10);
+      setNewCouponDesc('');
+      await loadCoupons();
+      setPanelSuccess('Промокод успешно создан и готов к применению');
+      setTimeout(() => setPanelSuccess(null), 3000);
+    } catch (e) {
+      setPanelError(e.message || 'Ошибка создания промокода');
+    }
+  };
+
+  // Удаление промокода
+  const handleDeleteCoupon = async (id, code) => {
+    if (!window.confirm(`Вы уверены, что хотите удалить промокод "${code}"?`)) return;
+    try {
+      setPanelError(null);
+      await deleteCoupon(id);
+      await loadCoupons();
+      setPanelSuccess(`Промокод "${code}" успешно удален`);
+      setTimeout(() => setPanelSuccess(null), 3000);
+    } catch (e) {
+      setPanelError(e.message || 'Ошибка удаления промокода');
+    }
+  };
+
+  // Переключение статуса промокода (вкл/пауза)
+  const handleToggleCoupon = async (id) => {
+    try {
+      setPanelError(null);
+      await toggleCoupon(id);
+      await loadCoupons();
+      setPanelSuccess('Статус активности промокода успешно обновлен');
+      setTimeout(() => setPanelSuccess(null), 3000);
+    } catch (e) {
+      setPanelError(e.message || 'Ошибка изменения статуса промокода');
     }
   };
 
@@ -452,6 +527,13 @@ export default function AdminPanel({
               onClick={() => setActiveTab('categories')}
             >
               Категории ({categories.length})
+            </button>
+            <button
+              type="button"
+              className={`tab-btn ${activeTab === 'coupons' ? 'active' : ''}`}
+              onClick={() => setActiveTab('coupons')}
+            >
+              Промокоды ({coupons.length})
             </button>
             <button
               type="button"
@@ -919,6 +1001,164 @@ export default function AdminPanel({
                       </div>
                       <button type="submit" className="btn btn-primary btn-sm" style={{ width: '100%' }}>
                         + Создать категорию
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Вкладка: Управление промокодами и купонами */}
+          {activeTab === 'coupons' && (() => {
+            const filteredCoupons = coupons.filter((c) => {
+              if (!couponSearch.trim()) return true;
+              const q = couponSearch.trim().toLowerCase();
+              return (
+                (c.code || '').toLowerCase().includes(q) ||
+                (c.description || '').toLowerCase().includes(q) ||
+                String(c.discount_percent).includes(q)
+              );
+            });
+
+            return (
+              <div>
+                <div style={{ marginBottom: '14px' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Поиск купонов по коду, размеру скидки или описанию..."
+                    value={couponSearch}
+                    onChange={(e) => setCouponSearch(e.target.value)}
+                    style={{ fontSize: '13px', padding: '6px 10px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
+                  {/* Список существующих промокодов */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h4 style={{ fontSize: '15px' }}>
+                        Список промокодов ({coupons.length})
+                      </h4>
+                      <button type="button" className="btn btn-outline btn-sm" onClick={loadCoupons}>
+                        Обновить
+                      </button>
+                    </div>
+
+                    {filteredCoupons.length === 0 ? (
+                      <p style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
+                        {couponSearch ? 'Промокодов по запросу не найдено' : 'Промокоды отсутствуют'}
+                      </p>
+                    ) : (
+                      <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                        <table className="custom-table">
+                          <thead>
+                            <tr>
+                              <th>Код</th>
+                              <th>Скидка</th>
+                              <th>Статус</th>
+                              <th>Действия</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredCoupons.map((cp) => (
+                              <tr key={cp.id}>
+                                <td>
+                                  <strong style={{ color: 'var(--accent-color)' }}>{cp.code}</strong>
+                                  {cp.description && (
+                                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                      {cp.description}
+                                    </div>
+                                  )}
+                                </td>
+                                <td>
+                                  <span className="badge-discount" style={{ fontWeight: 'bold' }}>
+                                    -{cp.discount_percent}%
+                                  </span>
+                                </td>
+                                <td>
+                                  <span style={{
+                                    display: 'inline-block',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                    background: cp.is_active ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                    color: cp.is_active ? '#22c55e' : 'var(--danger-color)'
+                                  }}>
+                                    {cp.is_active ? 'Активен' : 'Отключен'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline btn-sm"
+                                      onClick={() => handleToggleCoupon(cp.id)}
+                                      title={cp.is_active ? 'Отключить промокод' : 'Активировать промокод'}
+                                    >
+                                      {cp.is_active ? 'Пауза' : 'Вкл'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm"
+                                      style={{ color: 'var(--danger-color)' }}
+                                      onClick={() => handleDeleteCoupon(cp.id, cp.code)}
+                                      title="Удалить промокод"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Форма создания нового промокода */}
+                  <div style={{ background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', height: 'fit-content' }}>
+                    <h4 style={{ fontSize: '15px', marginBottom: '12px' }}>Создать промокод</h4>
+                    <form onSubmit={handleCreateCoupon}>
+                      <div className="form-group">
+                        <label>Код промокода:</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Например: SUMMER25"
+                          value={newCouponCode}
+                          onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Размер скидки (% от 1 до 99):</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="99"
+                          className="form-control"
+                          placeholder="15"
+                          value={newCouponDiscount}
+                          onChange={(e) => setNewCouponDiscount(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Описание (необязательно):</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Например: Скидка 15% для новых клиентов"
+                          value={newCouponDesc}
+                          onChange={(e) => setNewCouponDesc(e.target.value)}
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-primary btn-sm" style={{ width: '100%' }}>
+                        + Создать промокод
                       </button>
                     </form>
                   </div>

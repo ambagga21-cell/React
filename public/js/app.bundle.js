@@ -2753,13 +2753,14 @@ function AdminPanel({
   onCategoriesChanged,
   currentUser
 }) {
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'services' | 'categories' | 'reviews' | 'users'
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'services' | 'categories' | 'coupons' | 'reviews' | 'users'
   const [stats, setStats] = useState(null);
 
   // Списки данных
   const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [panelError, setPanelError] = useState(null);
   const [panelSuccess, setPanelSuccess] = useState(null);
@@ -2769,7 +2770,13 @@ function AdminPanel({
   const [orderSearch, setOrderSearch] = useState('');
   const [serviceSearch, setServiceSearch] = useState('');
   const [catSearch, setCatSearch] = useState('');
+  const [couponSearch, setCouponSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
+
+  // Форма добавления нового промокода
+  const [newCouponCode, setNewCouponCode] = useState('');
+  const [newCouponDiscount, setNewCouponDiscount] = useState(10);
+  const [newCouponDesc, setNewCouponDesc] = useState('');
 
   // Модалка добавления/редактирования услуги (длительность в часах и минутах + скидка + склад)
   const [editingService, setEditingService] = useState(null);
@@ -2806,7 +2813,7 @@ function AdminPanel({
     setLoading(true);
     setPanelError(null);
     try {
-      await Promise.all([loadStats(), loadOrders(), loadUsers(), loadReviews()]);
+      await Promise.all([loadStats(), loadOrders(), loadUsers(), loadReviews(), loadCoupons()]);
     } catch (e) {
       console.warn('Ошибка загрузки данных админ-панели:', e.message);
     } finally {
@@ -2851,6 +2858,71 @@ function AdminPanel({
     } catch (e) {
       console.error('Reviews load error:', e);
       setPanelError(e.message || 'Ошибка получения отзывов');
+    }
+  };
+  const loadCoupons = async () => {
+    try {
+      const data = await getCoupons();
+      setCoupons(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Coupons load error:', e);
+    }
+  };
+
+  // Создание промокода
+  const handleCreateCoupon = async e => {
+    e.preventDefault();
+    if (!newCouponCode.trim()) {
+      setPanelError('Укажите код промокода');
+      return;
+    }
+    const disc = parseInt(newCouponDiscount, 10);
+    if (isNaN(disc) || disc <= 0 || disc > 99) {
+      setPanelError('Скидка по промокоду должна быть целым числом в диапазоне от 1 до 99%');
+      return;
+    }
+    try {
+      setPanelError(null);
+      await createCoupon({
+        code: newCouponCode.trim().toUpperCase(),
+        discount_percent: disc,
+        description: newCouponDesc.trim()
+      });
+      setNewCouponCode('');
+      setNewCouponDiscount(10);
+      setNewCouponDesc('');
+      await loadCoupons();
+      setPanelSuccess('Промокод успешно создан и готов к применению');
+      setTimeout(() => setPanelSuccess(null), 3000);
+    } catch (e) {
+      setPanelError(e.message || 'Ошибка создания промокода');
+    }
+  };
+
+  // Удаление промокода
+  const handleDeleteCoupon = async (id, code) => {
+    if (!window.confirm(`Вы уверены, что хотите удалить промокод "${code}"?`)) return;
+    try {
+      setPanelError(null);
+      await deleteCoupon(id);
+      await loadCoupons();
+      setPanelSuccess(`Промокод "${code}" успешно удален`);
+      setTimeout(() => setPanelSuccess(null), 3000);
+    } catch (e) {
+      setPanelError(e.message || 'Ошибка удаления промокода');
+    }
+  };
+
+  // Переключение статуса промокода (вкл/пауза)
+  const handleToggleCoupon = async id => {
+    try {
+      setPanelError(null);
+      await toggleCoupon(id);
+      await loadCoupons();
+      setPanelSuccess('Статус активности промокода успешно обновлен');
+      setTimeout(() => setPanelSuccess(null), 3000);
+    } catch (e) {
+      setPanelError(e.message || 'Ошибка изменения статуса промокода');
     }
   };
 
@@ -3172,6 +3244,10 @@ function AdminPanel({
     className: `tab-btn ${activeTab === 'categories' ? 'active' : ''}`,
     onClick: () => setActiveTab('categories')
   }, "\u041A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438 (", categories.length, ")"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: `tab-btn ${activeTab === 'coupons' ? 'active' : ''}`,
+    onClick: () => setActiveTab('coupons')
+  }, "\u041F\u0440\u043E\u043C\u043E\u043A\u043E\u0434\u044B (", coupons.length, ")"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: `tab-btn ${activeTab === 'reviews' ? 'active' : ''}`,
     onClick: () => setActiveTab('reviews')
@@ -3556,6 +3632,154 @@ function AdminPanel({
         width: '100%'
       }
     }, "+ \u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E")))));
+  })(), activeTab === 'coupons' && (() => {
+    const filteredCoupons = coupons.filter(c => {
+      if (!couponSearch.trim()) return true;
+      const q = couponSearch.trim().toLowerCase();
+      return (c.code || '').toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q) || String(c.discount_percent).includes(q);
+    });
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: '14px'
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      className: "form-control",
+      placeholder: "\u041F\u043E\u0438\u0441\u043A \u043A\u0443\u043F\u043E\u043D\u043E\u0432 \u043F\u043E \u043A\u043E\u0434\u0443, \u0440\u0430\u0437\u043C\u0435\u0440\u0443 \u0441\u043A\u0438\u0434\u043A\u0438 \u0438\u043B\u0438 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u044E...",
+      value: couponSearch,
+      onChange: e => setCouponSearch(e.target.value),
+      style: {
+        fontSize: '13px',
+        padding: '6px 10px'
+      }
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '1.2fr 0.8fr',
+        gap: '20px'
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '12px'
+      }
+    }, /*#__PURE__*/React.createElement("h4", {
+      style: {
+        fontSize: '15px'
+      }
+    }, "\u0421\u043F\u0438\u0441\u043E\u043A \u043F\u0440\u043E\u043C\u043E\u043A\u043E\u0434\u043E\u0432 (", coupons.length, ")"), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn btn-outline btn-sm",
+      onClick: loadCoupons
+    }, "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C")), filteredCoupons.length === 0 ? /*#__PURE__*/React.createElement("p", {
+      style: {
+        textAlign: 'center',
+        padding: '20px',
+        color: 'var(--text-secondary)'
+      }
+    }, couponSearch ? 'Промокодов по запросу не найдено' : 'Промокоды отсутствуют') : /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxHeight: '420px',
+        overflowY: 'auto'
+      }
+    }, /*#__PURE__*/React.createElement("table", {
+      className: "custom-table"
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "\u041A\u043E\u0434"), /*#__PURE__*/React.createElement("th", null, "\u0421\u043A\u0438\u0434\u043A\u0430"), /*#__PURE__*/React.createElement("th", null, "\u0421\u0442\u0430\u0442\u0443\u0441"), /*#__PURE__*/React.createElement("th", null, "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044F"))), /*#__PURE__*/React.createElement("tbody", null, filteredCoupons.map(cp => /*#__PURE__*/React.createElement("tr", {
+      key: cp.id
+    }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: 'var(--accent-color)'
+      }
+    }, cp.code), cp.description && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: '11px',
+        color: 'var(--text-secondary)'
+      }
+    }, cp.description)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+      className: "badge-discount",
+      style: {
+        fontWeight: 'bold'
+      }
+    }, "-", cp.discount_percent, "%")), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: 'inline-block',
+        padding: '2px 6px',
+        borderRadius: '4px',
+        fontSize: '11px',
+        fontWeight: '600',
+        background: cp.is_active ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+        color: cp.is_active ? '#22c55e' : 'var(--danger-color)'
+      }
+    }, cp.is_active ? 'Активен' : 'Отключен')), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: '6px'
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn btn-outline btn-sm",
+      onClick: () => handleToggleCoupon(cp.id),
+      title: cp.is_active ? 'Отключить промокод' : 'Активировать промокод'
+    }, cp.is_active ? 'Пауза' : 'Вкл'), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn btn-sm",
+      style: {
+        color: 'var(--danger-color)'
+      },
+      onClick: () => handleDeleteCoupon(cp.id, cp.code),
+      title: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u043F\u0440\u043E\u043C\u043E\u043A\u043E\u0434"
+    }, "\u2715"))))))))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: 'rgba(0,0,0,0.02)',
+        padding: '16px',
+        borderRadius: '8px',
+        border: '1px solid var(--border-color)',
+        height: 'fit-content'
+      }
+    }, /*#__PURE__*/React.createElement("h4", {
+      style: {
+        fontSize: '15px',
+        marginBottom: '12px'
+      }
+    }, "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043F\u0440\u043E\u043C\u043E\u043A\u043E\u0434"), /*#__PURE__*/React.createElement("form", {
+      onSubmit: handleCreateCoupon
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "form-group"
+    }, /*#__PURE__*/React.createElement("label", null, "\u041A\u043E\u0434 \u043F\u0440\u043E\u043C\u043E\u043A\u043E\u0434\u0430:"), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      className: "form-control",
+      placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: SUMMER25",
+      value: newCouponCode,
+      onChange: e => setNewCouponCode(e.target.value.toUpperCase()),
+      required: true
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "form-group"
+    }, /*#__PURE__*/React.createElement("label", null, "\u0420\u0430\u0437\u043C\u0435\u0440 \u0441\u043A\u0438\u0434\u043A\u0438 (% \u043E\u0442 1 \u0434\u043E 99):"), /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: "1",
+      max: "99",
+      className: "form-control",
+      placeholder: "15",
+      value: newCouponDiscount,
+      onChange: e => setNewCouponDiscount(e.target.value),
+      required: true
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "form-group"
+    }, /*#__PURE__*/React.createElement("label", null, "\u041E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E):"), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      className: "form-control",
+      placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0421\u043A\u0438\u0434\u043A\u0430 15% \u0434\u043B\u044F \u043D\u043E\u0432\u044B\u0445 \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432",
+      value: newCouponDesc,
+      onChange: e => setNewCouponDesc(e.target.value)
+    })), /*#__PURE__*/React.createElement("button", {
+      type: "submit",
+      className: "btn btn-primary btn-sm",
+      style: {
+        width: '100%'
+      }
+    }, "+ \u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043F\u0440\u043E\u043C\u043E\u043A\u043E\u0434")))));
   })(), activeTab === 'reviews' && (() => {
     const filteredReviews = reviews.filter(r => {
       if (revRating !== 'all' && Number(r.rating) !== Number(revRating)) {

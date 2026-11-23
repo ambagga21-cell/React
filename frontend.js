@@ -99,6 +99,19 @@ const server = http.createServer((req, res) => {
 
 let isListening = false;
 
+function freePort(port) {
+  try {
+    const { execSync } = require('child_process');
+    if (process.platform === 'win32') {
+      execSync(`powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"`, { stdio: 'ignore' });
+    } else {
+      execSync(`lsof -ti:${port} | xargs kill -9`, { stdio: 'ignore' });
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
 function startFrontend() {
   return new Promise((resolve, reject) => {
     if (isListening) return resolve(server);
@@ -110,10 +123,25 @@ function startFrontend() {
       console.error('Ошибка сборки React бандла:', e.message);
     }
 
-    server.listen(PORT, (err) => {
-      if (err) return reject(err);
+    server.listen(PORT);
+
+    server.once('listening', () => {
       isListening = true;
       resolve(server);
+    });
+
+    server.once('error', async (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.warn(`[Frontend] Порт ${PORT} занят. Освобождаем порт...`);
+        freePort(PORT);
+        await new Promise(r => setTimeout(r, 600));
+        server.listen(PORT, () => {
+          isListening = true;
+          resolve(server);
+        });
+      } else {
+        reject(err);
+      }
     });
   });
 }
