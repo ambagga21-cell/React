@@ -17,6 +17,7 @@ router.get('/', async (req, res) => {
         s.price, 
         COALESCE(s.discount_percent, 0)::int AS discount_percent,
         ROUND(s.price * (1 - COALESCE(s.discount_percent, 0)::numeric / 100), 2)::numeric(10,2) AS final_price,
+        COALESCE(s.stock, 10)::int AS stock,
         s.image_url,
         COALESCE(c.name, 'Без категории') AS category_name,
         COALESCE(ROUND(AVG(r.rating), 1), 0) AS average_rating,
@@ -101,6 +102,7 @@ router.get('/:id', async (req, res) => {
         s.price, 
         COALESCE(s.discount_percent, 0)::int AS discount_percent,
         ROUND(s.price * (1 - COALESCE(s.discount_percent, 0)::numeric / 100), 2)::numeric(10,2) AS final_price,
+        COALESCE(s.stock, 10)::int AS stock,
         s.image_url,
         COALESCE(c.name, 'Без категории') AS category_name,
         COALESCE(ROUND(AVG(r.rating), 1), 0) AS average_rating,
@@ -126,14 +128,14 @@ router.get('/:id', async (req, res) => {
 // POST /api/services - Добавление новой услуги (только админ)
 router.post('/', requireAdmin, async (req, res) => {
   try {
-    const { category_id, category_name, name, description, duration, price, discount_percent, image_url } = req.body;
+    const { category_id, category_name, name, description, duration, price, discount_percent, stock, image_url } = req.body;
 
     if (!name || name.trim().length === 0) {
       return res.status(400).json({ error: 'Укажите название услуги' });
     }
 
     if (!price || isNaN(Number(price)) || Number(price) <= 0) {
-      return res.status(400).json({ error: 'Цена должна быть положительным числом' });
+      return res.status(400).json({ error: 'Цена должна быть положительным числом больше 0' });
     }
 
     let resolvedCatId = null;
@@ -166,13 +168,23 @@ router.post('/', requireAdmin, async (req, res) => {
       }
       discountNum = dNum;
     }
+
+    let stockNum = 10;
+    if (stock !== undefined && stock !== null && stock !== '') {
+      const sNum = parseInt(stock, 10);
+      if (isNaN(sNum) || sNum < 0) {
+        return res.status(400).json({ error: 'Количество на складе должно быть неотрицательным числом' });
+      }
+      stockNum = sNum;
+    }
+
     const img = image_url || '/images/services/styling.jpg';
 
     const insertRes = await db.query(`
-      INSERT INTO services (category_id, name, description, duration_minutes, price, discount_percent, image_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id, name, description, duration_minutes AS duration, price, discount_percent, image_url
-    `, [resolvedCatId, name.trim(), description ? description.trim() : '', durationNum, Number(price), discountNum, img]);
+      INSERT INTO services (category_id, name, description, duration_minutes, price, discount_percent, stock, image_url)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id, name, description, duration_minutes AS duration, price, discount_percent, stock, image_url
+    `, [resolvedCatId, name.trim(), description ? description.trim() : '', durationNum, Number(price), discountNum, stockNum, img]);
 
     // Возвращаем услугу с JOIN названия категории
     const serviceWithCat = await db.query(`
@@ -180,6 +192,7 @@ router.post('/', requireAdmin, async (req, res) => {
         s.id, s.name, s.description, s.duration_minutes AS duration, s.price,
         COALESCE(s.discount_percent, 0)::int AS discount_percent,
         ROUND(s.price * (1 - COALESCE(s.discount_percent, 0)::numeric / 100), 2)::numeric(10,2) AS final_price,
+        COALESCE(s.stock, 10)::int AS stock,
         s.image_url,
         COALESCE(c.name, 'Без категории') AS category_name, 0 AS average_rating, 0 AS reviews_count
       FROM services s
@@ -198,14 +211,14 @@ router.post('/', requireAdmin, async (req, res) => {
 router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, category_name, name, description, duration, price, discount_percent, image_url } = req.body;
+    const { category_id, category_name, name, description, duration, price, discount_percent, stock, image_url } = req.body;
 
     if (!name || name.trim().length === 0) {
       return res.status(400).json({ error: 'Укажите название услуги' });
     }
 
     if (!price || isNaN(Number(price)) || Number(price) <= 0) {
-      return res.status(400).json({ error: 'Цена должна быть положительным числом' });
+      return res.status(400).json({ error: 'Цена должна быть положительным числом больше 0' });
     }
 
     let resolvedCatId = undefined;
@@ -246,6 +259,15 @@ router.put('/:id', requireAdmin, async (req, res) => {
       discountNum = dNum;
     }
 
+    let stockNum = null;
+    if (stock !== undefined && stock !== null && stock !== '') {
+      const sNum = parseInt(stock, 10);
+      if (isNaN(sNum) || sNum < 0) {
+        return res.status(400).json({ error: 'Количество на складе должно быть неотрицательным числом' });
+      }
+      stockNum = sNum;
+    }
+
     const updateRes = await db.query(`
       UPDATE services 
       SET 
@@ -255,8 +277,9 @@ router.put('/:id', requireAdmin, async (req, res) => {
         duration_minutes = $5,
         price = $6,
         discount_percent = COALESCE($7, discount_percent),
-        image_url = COALESCE($8, image_url)
-      WHERE id = $9
+        stock = COALESCE($8, stock),
+        image_url = COALESCE($9, image_url)
+      WHERE id = $10
       RETURNING id
     `, [
       resolvedCatId !== undefined,
@@ -266,6 +289,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
       durationNum !== null ? durationNum : 60,
       Number(price),
       discountNum,
+      stockNum,
       image_url || null,
       id
     ]);

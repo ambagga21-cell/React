@@ -44,6 +44,8 @@ router.get('/orders', async (req, res) => {
         o.delivery_address,
         o.delivery_date,
         o.total_price,
+        o.coupon_code,
+        COALESCE(o.discount_amount, 0)::numeric(10,2) AS discount_amount,
         o.status,
         o.created_at,
         u.name AS user_name,
@@ -54,7 +56,8 @@ router.get('/orders', async (req, res) => {
             'service_name', s.name,
             'category_name', COALESCE(c.name, 'Без категории'),
             'quantity', oi.quantity,
-            'price', oi.price_at_order
+            'price', oi.price_at_order,
+            'image_url', s.image_url
           ))
           FROM order_items oi
           JOIN services s ON oi.service_id = s.id

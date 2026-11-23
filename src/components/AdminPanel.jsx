@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { getAdminStats, getAdminOrders, updateOrderStatus, deleteOrder, getAdminUsers, updateUserRole, deleteUser, getAdminReviews, deleteReview } from '../api/admin';
 import { createService, updateService, deleteService } from '../api/services';
 import { createCategory, updateCategory, deleteCategory } from '../api/categories';
-import { formatDuration } from '../utils/formatters';
+import { formatDuration, formatPrice, calculateFinalPrice } from '../utils/formatters';
+import { formatPhoneNumber } from '../api/auth';
 
 // Полнофункциональная панель администратора для управления всеми ресурсами ИС
 export default function AdminPanel({
@@ -26,12 +27,19 @@ export default function AdminPanel({
   const [panelSuccess, setPanelSuccess] = useState(null);
   const [serviceModalError, setServiceModalError] = useState(null);
 
-  // Модалка добавления/редактирования услуги (длительность в часах и минутах + скидка)
+  // Поиск по каждой вкладке админ-панели
+  const [orderSearch, setOrderSearch] = useState('');
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [catSearch, setCatSearch] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+
+  // Модалка добавления/редактирования услуги (длительность в часах и минутах + скидка + склад)
   const [editingService, setEditingService] = useState(null);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [sName, setSName] = useState('');
   const [sCat, setSCat] = useState('');
   const [sPrice, setSPrice] = useState('');
+  const [sStock, setSStock] = useState(10);
   const [sHours, setSHours] = useState(1);
   const [sMinutes, setSMinutes] = useState(0);
   const [sDiscount, setSDiscount] = useState(0);
@@ -39,11 +47,18 @@ export default function AdminPanel({
   const [sImg, setSImg] = useState('');
   const [sNewCatName, setSNewCatName] = useState('');
 
+  // Редактирование существующей категории
+  const [editingCat, setEditingCat] = useState(null);
+  const [isEditCatModalOpen, setIsEditCatModalOpen] = useState(false);
+  const [editCatName, setEditCatName] = useState('');
+  const [editCatDesc, setEditCatDesc] = useState('');
+  const [catModalError, setCatModalError] = useState(null);
+
   // Поиск и фильтрация отзывов в панели админа
   const [revSearch, setRevSearch] = useState('');
   const [revRating, setRevRating] = useState('all');
 
-  // Модалка добавления категории
+  // Форма добавления новой категории
   const [catName, setCatName] = useState('');
   const [catDesc, setCatDesc] = useState('');
 
@@ -197,6 +212,7 @@ export default function AdminPanel({
     setSCat(firstCat ? firstCat.name : (categories.length > 0 ? categories[0].name : 'Без категории'));
     setSNewCatName('');
     setSPrice('');
+    setSStock(10);
     setSHours(1);
     setSMinutes(0);
     setSDiscount(0);
@@ -213,6 +229,7 @@ export default function AdminPanel({
     setSCat(s.category_name || 'Без категории');
     setSNewCatName('');
     setSPrice(s.price);
+    setSStock(s.stock !== undefined ? s.stock : 10);
     const totalMins = Number(s.duration || s.duration_minutes || 60);
     setSHours(Math.floor(totalMins / 60));
     setSMinutes(totalMins % 60);
@@ -228,6 +245,11 @@ export default function AdminPanel({
     e.preventDefault();
     if (!sName || !sPrice) {
       setServiceModalError('Заполните обязательные поля (название и цена)');
+      return;
+    }
+
+    if (Number(sPrice) <= 0) {
+      setServiceModalError('Цена услуги должна быть строго больше 0 ₽');
       return;
     }
 
@@ -256,6 +278,13 @@ export default function AdminPanel({
       return;
     }
 
+    // Валидация остатка на складе
+    const stockVal = sStock === '' ? 10 : parseInt(sStock, 10);
+    if (isNaN(stockVal) || stockVal < 0) {
+      setServiceModalError('Количество на складе должно быть целым неотрицательным числом');
+      return;
+    }
+
     let finalCategoryName = sCat;
     if (sCat === '__new__') {
       if (!sNewCatName || !sNewCatName.trim()) {
@@ -271,6 +300,7 @@ export default function AdminPanel({
         name: sName.trim(),
         category_name: finalCategoryName,
         price: Number(sPrice),
+        stock: stockVal,
         duration: calculatedDuration,
         discount_percent: discountVal,
         description: sDesc.trim(),
@@ -310,6 +340,42 @@ export default function AdminPanel({
     }
   };
 
+  // Редактирование существующей категории
+  const handleOpenEditCategory = (cat) => {
+    if (cat.name === 'Без категории') {
+      setPanelError('Системную категорию «Без категории» нельзя редактировать или переименовывать');
+      return;
+    }
+    setEditingCat(cat);
+    setEditCatName(cat.name);
+    setEditCatDesc(cat.description || '');
+    setCatModalError(null);
+    setIsEditCatModalOpen(true);
+  };
+
+  const handleSaveEditCategory = async (e) => {
+    e.preventDefault();
+    if (!editCatName.trim()) {
+      setCatModalError('Название категории обязательно');
+      return;
+    }
+    try {
+      setCatModalError(null);
+      await updateCategory(editingCat.id, {
+        name: editCatName.trim(),
+        description: editCatDesc.trim()
+      });
+      setIsEditCatModalOpen(false);
+      setEditingCat(null);
+      if (onCategoriesChanged) onCategoriesChanged();
+      if (onServicesChanged) onServicesChanged();
+      setPanelSuccess('Категория успешно обновлена');
+      setTimeout(() => setPanelSuccess(null), 3000);
+    } catch (e) {
+      setCatModalError(e.message || 'Ошибка обновления категории');
+    }
+  };
+
   // Добавление новой категории
   const handleAddCategory = async (e) => {
     e.preventDefault();
@@ -328,14 +394,18 @@ export default function AdminPanel({
   };
 
   // Удаление категории
-  const handleDeleteCategory = async (id) => {
-    if (!window.confirm('Удалить категорию? Услуги из этой категории будут сохранены и перенесены в раздел «Без категории».')) return;
+  const handleDeleteCategory = async (id, catName) => {
+    if (catName === 'Без категории') {
+      setPanelError('Системную категорию «Без категории» нельзя удалить, она должна присутствовать всегда');
+      return;
+    }
+    if (!window.confirm('Удалить категорию? Услуги из этой категории будут сохранены и автоматически перенесены в категорию «Без категории».')) return;
     try {
       setPanelError(null);
       await deleteCategory(id);
       if (onCategoriesChanged) onCategoriesChanged();
       if (onServicesChanged) onServicesChanged();
-      setPanelSuccess('Категория удалена. Услуги перенесены в раздел «Без категории»');
+      setPanelSuccess('Категория удалена. Все товары автоматически перенесены в раздел «Без категории»');
       setTimeout(() => setPanelSuccess(null), 3000);
     } catch (e) {
       setPanelError(e.message || 'Ошибка удаления категории');
@@ -447,290 +517,415 @@ export default function AdminPanel({
           )}
 
           {/* Вкладка 1: Заказы (с отображением x2, x3 для повторяющихся услуг) */}
-          {activeTab === 'orders' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h4 style={{ fontSize: '15px' }}>Список поступивших заказов</h4>
-                <button type="button" className="btn btn-outline btn-sm" onClick={loadOrders}>
-                  Обновить список
-                </button>
-              </div>
+          {activeTab === 'orders' && (() => {
+            const filteredOrders = orders.filter((o) => {
+              if (!orderSearch.trim()) return true;
+              const q = orderSearch.trim().toLowerCase();
+              return (
+                String(o.id).includes(q) ||
+                (o.user_name || '').toLowerCase().includes(q) ||
+                (o.user_email || '').toLowerCase().includes(q) ||
+                (o.user_phone || '').toLowerCase().includes(q) ||
+                (o.delivery_address || '').toLowerCase().includes(q) ||
+                (o.status || '').toLowerCase().includes(q) ||
+                (o.coupon_code || '').toLowerCase().includes(q) ||
+                (o.items_summary || '').toLowerCase().includes(q)
+              );
+            });
 
-              {loading ? (
-                <p style={{ textAlign: 'center', padding: '20px' }}>Загрузка заказов...</p>
-              ) : orders.length === 0 ? (
-                <p style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>Заказов пока нет</p>
-              ) : (
-                <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
-                  <table className="custom-table">
-                    <thead>
-                      <tr>
-                        <th>№</th>
-                        <th>Клиент</th>
-                        <th>Телефон</th>
-                        <th>Адрес доставки</th>
-                        <th>Дата доставки</th>
-                        <th>Услуги (с количеством x2, x3)</th>
-                        <th>Сумма</th>
-                        <th>Статус</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orders.map((o, idx) => (
-                        <tr key={o.id}>
-                          <td><strong>№ {idx + 1}</strong></td>
-                          <td>
-                            <strong>{o.user_name}</strong>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{o.user_email}</div>
-                          </td>
-                          <td>{formatPhoneNumber(o.user_phone) || o.user_phone || '—'}</td>
-                          <td>{o.delivery_address}</td>
-                          <td>{new Date(o.delivery_date).toLocaleDateString('ru-RU')}</td>
-                          <td>
-                            {/* Отображение услуг с группировкой x2, x3 */}
-                            <span style={{ fontSize: '13px', color: 'var(--accent-color)', fontWeight: '500' }}>
-                              {o.items_summary}
-                            </span>
-                          </td>
-                          <td style={{ fontWeight: 'bold' }}>
-                            {Number(o.total_price).toLocaleString('ru-RU')} ₽
-                          </td>
-                          <td>
-                            {o.status === 'Выполнен' ? (
-                              <span style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                background: 'rgba(34, 197, 94, 0.15)',
-                                color: '#22c55e',
-                                fontWeight: '600',
-                                fontSize: '12px'
-                              }} title="Заказ выполнен (редактирование заблокировано)">
-                                ✓ Выполнен
-                              </span>
-                            ) : o.status === 'Отменен' ? (
-                              <span style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                background: 'rgba(239, 68, 68, 0.15)',
-                                color: 'var(--danger-color)',
-                                fontWeight: '600',
-                                fontSize: '12px'
-                              }} title="Заказ отменен (редактирование заблокировано)">
-                                ✕ Отменен
-                              </span>
-                            ) : (
-                              <select
-                                value={o.status}
-                                onChange={(e) => handleStatusChange(o.id, e.target.value)}
-                                style={{
-                                  padding: '4px 6px',
-                                  borderRadius: '4px',
-                                  border: '1px solid var(--border-color)',
-                                  background: 'var(--card-bg)',
-                                  color: 'var(--text-primary)',
-                                  fontSize: '12px'
-                                }}
-                              >
-                                <option value="Принят">Принят</option>
-                                <option value="В обработке">В обработке</option>
-                                <option value="Выполнен">Выполнен</option>
-                                <option value="Отменен">Отменен</option>
-                              </select>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            return (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h4 style={{ fontSize: '15px' }}>Список поступивших заказов ({orders.length})</h4>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={loadOrders}>
+                    Обновить список
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
+
+                <div style={{ marginBottom: '12px' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Поиск заказов по клиенту, email, телефону, адресу, статусу или купону..."
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    style={{ fontSize: '13px', padding: '6px 10px' }}
+                  />
+                </div>
+
+                {loading ? (
+                  <p style={{ textAlign: 'center', padding: '20px' }}>Загрузка заказов...</p>
+                ) : filteredOrders.length === 0 ? (
+                  <p style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
+                    {orderSearch ? 'Ничего не найдено по запросу поиска' : 'Заказов пока нет'}
+                  </p>
+                ) : (
+                  <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                    <table className="custom-table">
+                      <thead>
+                        <tr>
+                          <th>№</th>
+                          <th>Клиент</th>
+                          <th>Телефон</th>
+                          <th>Адрес доставки</th>
+                          <th>Дата доставки</th>
+                          <th>Услуги (с количеством x2, x3)</th>
+                          <th>Сумма</th>
+                          <th>Статус</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredOrders.map((o, idx) => (
+                          <tr key={o.id}>
+                            <td><strong>№ {idx + 1}</strong></td>
+                            <td>
+                              <strong>{o.user_name}</strong>
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{o.user_email}</div>
+                            </td>
+                            <td>{formatPhoneNumber(o.user_phone) || o.user_phone || '—'}</td>
+                            <td>{o.delivery_address}</td>
+                            <td>{new Date(o.delivery_date).toLocaleDateString('ru-RU')}</td>
+                            <td>
+                              {/* Отображение услуг с группировкой x2, x3 */}
+                              <span style={{ fontSize: '13px', color: 'var(--accent-color)', fontWeight: '500' }}>
+                                {o.items_summary}
+                              </span>
+                              {o.coupon_code && (
+                                <div style={{
+                                  display: 'inline-block',
+                                  marginTop: '4px',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  background: 'rgba(34, 197, 94, 0.15)',
+                                  color: '#16a34a',
+                                  fontSize: '11px',
+                                  fontWeight: '600'
+                                }}>
+                                  🎟 Купон: {o.coupon_code} (-{Number(o.discount_amount).toLocaleString('ru-RU')} ₽)
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ fontWeight: 'bold' }}>
+                              {Number(o.total_price).toLocaleString('ru-RU')} ₽
+                            </td>
+                            <td>
+                              {o.status === 'Выполнен' ? (
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  background: 'rgba(34, 197, 94, 0.15)',
+                                  color: '#22c55e',
+                                  fontWeight: '600',
+                                  fontSize: '12px'
+                                }} title="Заказ выполнен (редактирование заблокировано)">
+                                  ✓ Выполнен
+                                </span>
+                              ) : o.status === 'Отменен' ? (
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  background: 'rgba(239, 68, 68, 0.15)',
+                                  color: 'var(--danger-color)',
+                                  fontWeight: '600',
+                                  fontSize: '12px'
+                                }} title="Заказ отменен (редактирование заблокировано)">
+                                  ✕ Отменен
+                                </span>
+                              ) : (
+                                <select
+                                  value={o.status}
+                                  onChange={(e) => handleStatusChange(o.id, e.target.value)}
+                                  style={{
+                                    padding: '4px 6px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border-color)',
+                                    background: 'var(--card-bg)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '12px'
+                                  }}
+                                >
+                                  <option value="Принят">Принят</option>
+                                  <option value="В обработке">В обработке</option>
+                                  <option value="Выполнен">Выполнен</option>
+                                  <option value="Отменен">Отменен</option>
+                                </select>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Вкладка 2: Управление услугами */}
-          {activeTab === 'services' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <h4 style={{ fontSize: '15px' }}>Управление каталогом услуг</h4>
-                <button type="button" className="btn btn-primary btn-sm" onClick={handleOpenAddService}>
-                  + Добавить новую услугу
-                </button>
-              </div>
+          {activeTab === 'services' && (() => {
+            const filteredServices = services.filter((s) => {
+              if (!serviceSearch.trim()) return true;
+              const q = serviceSearch.trim().toLowerCase();
+              return (
+                (s.name || '').toLowerCase().includes(q) ||
+                (s.category_name || '').toLowerCase().includes(q) ||
+                (s.description || '').toLowerCase().includes(q)
+              );
+            });
 
-              <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
-                <table className="custom-table">
-                  <thead>
-                    <tr>
-                      <th>№</th>
-                      <th>Фото</th>
-                      <th>Название услуги</th>
-                      <th>Категория</th>
-                      <th>Длительность</th>
-                      <th>Цена</th>
-                      <th>Скидка</th>
-                      <th>Рейтинг</th>
-                      <th>Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {services.map((s, idx) => {
-                      const discount = Number(s.discount_percent || 0);
-                      const origPrice = Number(s.price || 0);
-                      const finalPrice = discount > 0
-                        ? Number(s.final_price !== undefined ? s.final_price : calculateFinalPrice(origPrice, discount))
-                        : origPrice;
+            return (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <h4 style={{ fontSize: '15px' }}>Управление каталогом услуг ({services.length})</h4>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={handleOpenAddService}>
+                    + Добавить новую услугу
+                  </button>
+                </div>
 
-                      return (
-                        <tr key={s.id}>
-                          <td>№ {idx + 1}</td>
-                          <td>
-                            <img
-                              src={s.image_url || '/images/services/styling.jpg'}
-                              alt=""
-                              style={{ width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover' }}
-                            />
-                          </td>
-                          <td><strong>{s.name}</strong></td>
-                          <td>{s.category_name || 'Без категории'}</td>
-                          <td>
-                            <span style={{ fontWeight: '500' }}>
-                              {formatDuration(s.duration)}
-                            </span>
-                          </td>
-                          <td>
-                            {discount > 0 ? (
-                              <div>
-                                <span style={{ textDecoration: 'line-through', color: 'var(--text-secondary)', fontSize: '11px', display: 'block' }}>
-                                  {formatPrice(origPrice)}
-                                </span>
-                                <strong style={{ color: '#ef4444' }}>
-                                  {formatPrice(finalPrice)}
-                                </strong>
-                              </div>
-                            ) : (
-                              <strong style={{ fontWeight: 'bold' }}>
-                                {formatPrice(origPrice)}
-                              </strong>
-                            )}
-                          </td>
-                          <td>
-                            {discount > 0 ? (
-                              <span className="badge-discount">
-                                -{discount}%
-                              </span>
-                            ) : (
-                              <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>—</span>
-                            )}
-                          </td>
-                          <td>{Number(s.average_rating) > 0 ? Number(s.average_rating).toFixed(1) : '—'}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <button
-                                type="button"
-                                className="btn btn-outline btn-sm"
-                                onClick={() => handleOpenEditService(s)}
-                              >
-                                Ред.
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-sm"
-                                style={{ color: 'var(--danger-color)' }}
-                                onClick={() => handleDeleteService(s.id)}
-                              >
-                                Удал.
-                              </button>
-                            </div>
-                          </td>
+                <div style={{ marginBottom: '12px' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Поиск услуг по названию, категории или описанию..."
+                    value={serviceSearch}
+                    onChange={(e) => setServiceSearch(e.target.value)}
+                    style={{ fontSize: '13px', padding: '6px 10px' }}
+                  />
+                </div>
+
+                {filteredServices.length === 0 ? (
+                  <p style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
+                    {serviceSearch ? 'Услуг по запросу поиска не найдено' : 'Каталог услуг пуст'}
+                  </p>
+                ) : (
+                  <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                    <table className="custom-table">
+                      <thead>
+                        <tr>
+                          <th>№</th>
+                          <th>Фото</th>
+                          <th>Название услуги</th>
+                          <th>Категория</th>
+                          <th>Склад</th>
+                          <th>Длительность</th>
+                          <th>Цена</th>
+                          <th>Скидка</th>
+                          <th>Рейтинг</th>
+                          <th>Действия</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {filteredServices.map((s, idx) => {
+                          const discount = Number(s.discount_percent || 0);
+                          const origPrice = Number(s.price || 0);
+                          const finalPrice = discount > 0
+                            ? Number(s.final_price !== undefined ? s.final_price : calculateFinalPrice(origPrice, discount))
+                            : origPrice;
+
+                          return (
+                            <tr key={s.id}>
+                              <td>№ {idx + 1}</td>
+                              <td>
+                                <img
+                                  src={s.image_url || '/images/services/styling.jpg'}
+                                  alt=""
+                                  style={{ width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover' }}
+                                />
+                              </td>
+                              <td><strong>{s.name}</strong></td>
+                              <td>{s.category_name || 'Без категории'}</td>
+                              <td>
+                                <span style={{
+                                  fontWeight: '600',
+                                  color: (s.stock !== undefined ? s.stock : 10) > 0 ? 'var(--text-primary)' : 'var(--danger-color)'
+                                }}>
+                                  {s.stock !== undefined ? `${s.stock} шт.` : '10 шт.'}
+                                </span>
+                              </td>
+                              <td>
+                                <span style={{ fontWeight: '500' }}>
+                                  {formatDuration(s.duration)}
+                                </span>
+                              </td>
+                              <td>
+                                {discount > 0 ? (
+                                  <div>
+                                    <span style={{ textDecoration: 'line-through', color: 'var(--text-secondary)', fontSize: '11px', display: 'block' }}>
+                                      {formatPrice(origPrice)}
+                                    </span>
+                                    <strong style={{ color: '#ef4444' }}>
+                                      {formatPrice(finalPrice)}
+                                    </strong>
+                                  </div>
+                                ) : (
+                                  <strong style={{ fontWeight: 'bold' }}>
+                                    {formatPrice(origPrice)}
+                                  </strong>
+                                )}
+                              </td>
+                              <td>
+                                {discount > 0 ? (
+                                  <span className="badge-discount">
+                                    -{discount}%
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>—</span>
+                                )}
+                              </td>
+                              <td>{Number(s.average_rating) > 0 ? Number(s.average_rating).toFixed(1) : '—'}</td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline btn-sm"
+                                    onClick={() => handleOpenEditService(s)}
+                                  >
+                                    Ред.
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    style={{ color: 'var(--danger-color)' }}
+                                    onClick={() => handleDeleteService(s.id)}
+                                  >
+                                    Удал.
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Вкладка 3: Категории */}
-          {activeTab === 'categories' && (
-            <div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                {/* Список существующих категорий */}
-                <div>
-                  <h4 style={{ fontSize: '15px', marginBottom: '12px' }}>Существующие категории</h4>
-                  <table className="custom-table">
-                    <thead>
-                      <tr>
-                        <th>Название категории</th>
-                        <th>Услуг</th>
-                        <th>Удалить</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {categories.map((c) => (
-                        <tr key={c.id || c.name}>
-                          <td><strong>{c.name}</strong></td>
-                          <td>{c.services_count || 0}</td>
-                          <td>
-                            {c.id ? (
-                              <button
-                                type="button"
-                                className="btn btn-sm"
-                                style={{ color: 'var(--danger-color)' }}
-                                onClick={() => handleDeleteCategory(c.id)}
-                                title="Удалить категорию"
-                              >
-                                ✕
-                              </button>
-                            ) : (
-                              <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          {activeTab === 'categories' && (() => {
+            const filteredCategories = categories.filter((c) => {
+              if (!catSearch.trim()) return true;
+              const q = catSearch.trim().toLowerCase();
+              return (
+                (c.name || '').toLowerCase().includes(q) ||
+                (c.description || '').toLowerCase().includes(q)
+              );
+            });
+
+            return (
+              <div>
+                <div style={{ marginBottom: '14px' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Поиск категорий по названию или описанию..."
+                    value={catSearch}
+                    onChange={(e) => setCatSearch(e.target.value)}
+                    style={{ fontSize: '13px', padding: '6px 10px' }}
+                  />
                 </div>
 
-                {/* Форма добавления новой категории */}
-                <div style={{ background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <h4 style={{ fontSize: '15px', marginBottom: '12px' }}>Добавить категорию</h4>
-                  <form onSubmit={handleAddCategory}>
-                    <div className="form-group">
-                      <label>Название категории:</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Например: Спа-процедуры"
-                        value={catName}
-                        onChange={(e) => setCatName(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Описание (необязательно):</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Краткое описание категории..."
-                        value={catDesc}
-                        onChange={(e) => setCatDesc(e.target.value)}
-                      />
-                    </div>
-                    <button type="submit" className="btn btn-primary btn-sm" style={{ width: '100%' }}>
-                      + Создать категорию
-                    </button>
-                  </form>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
+                  {/* Список существующих категорий */}
+                  <div>
+                    <h4 style={{ fontSize: '15px', marginBottom: '12px' }}>
+                      Существующие категории ({categories.length})
+                    </h4>
+                    <table className="custom-table">
+                      <thead>
+                        <tr>
+                          <th>Название категории</th>
+                          <th>Услуг</th>
+                          <th>Действия</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredCategories.map((c) => (
+                          <tr key={c.id || c.name}>
+                            <td>
+                              <strong>{c.name}</strong>
+                              {c.description && (
+                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                  {c.description}
+                                </div>
+                              )}
+                            </td>
+                            <td>{c.services_count || 0}</td>
+                            <td>
+                              {c.name === 'Без категории' ? (
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                                  Системная
+                                </span>
+                              ) : (
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline btn-sm"
+                                    onClick={() => handleOpenEditCategory(c)}
+                                    title="Редактировать категорию"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    style={{ color: 'var(--danger-color)' }}
+                                    onClick={() => handleDeleteCategory(c.id, c.name)}
+                                    title="Удалить категорию (товары перейдут в «Без категории»)"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Форма добавления новой категории */}
+                  <div style={{ background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', height: 'fit-content' }}>
+                    <h4 style={{ fontSize: '15px', marginBottom: '12px' }}>Добавить категорию</h4>
+                    <form onSubmit={handleAddCategory}>
+                      <div className="form-group">
+                        <label>Название категории:</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Например: Спа-процедуры"
+                          value={catName}
+                          onChange={(e) => setCatName(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Описание (необязательно):</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Краткое описание категории..."
+                          value={catDesc}
+                          onChange={(e) => setCatDesc(e.target.value)}
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-primary btn-sm" style={{ width: '100%' }}>
+                        + Создать категорию
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Вкладка 4: Модерация отзывов */}
           {activeTab === 'reviews' && (() => {
@@ -881,93 +1076,121 @@ export default function AdminPanel({
           })()}
 
           {/* Вкладка 5: Пользователи */}
-          {activeTab === 'users' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h4 style={{ fontSize: '15px' }}>Управление пользователями и ролями</h4>
-                <button type="button" className="btn btn-outline btn-sm" onClick={loadUsers}>
-                  Обновить
-                </button>
-              </div>
+          {activeTab === 'users' && (() => {
+            const filteredUsers = users.filter((u) => {
+              if (!userSearch.trim()) return true;
+              const q = userSearch.trim().toLowerCase();
+              return (
+                (u.name || '').toLowerCase().includes(q) ||
+                (u.email || '').toLowerCase().includes(q) ||
+                (u.phone || '').toLowerCase().includes(q) ||
+                (u.role || '').toLowerCase().includes(q)
+              );
+            });
 
-              {loading ? (
-                <p style={{ textAlign: 'center', padding: '20px' }}>Загрузка пользователей...</p>
-              ) : (
-                <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
-                  <table className="custom-table">
-                    <thead>
-                      <tr>
-                        <th>№</th>
-                        <th>Имя</th>
-                        <th>Email</th>
-                        <th>Телефон</th>
-                        <th>Роль</th>
-                        <th>Сменить роль</th>
-                        <th>Удалить</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map((u, idx) => (
-                        <tr key={u.id}>
-                          <td>№ {idx + 1}</td>
-                          <td><strong>{u.name}</strong></td>
-                          <td>{u.email}</td>
-                          <td>{formatPhoneNumber(u.phone) || u.phone || '—'}</td>
-                          <td>
-                            <span className={`badge ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}`}>
-                              {u.role === 'admin' ? 'Администратор' : 'Клиент'}
-                            </span>
-                          </td>
-                          <td>
-                            {u.email.toLowerCase() === 'admin@lavka.ru' ? (
-                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                                Главный администратор
-                              </span>
-                            ) : u.id === currentUser?.id ? (
-                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                                Текущий аккаунт
-                              </span>
-                            ) : (
-                              <select
-                                value={u.role}
-                                onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                                style={{
-                                  padding: '4px',
-                                  borderRadius: '4px',
-                                  border: '1px solid var(--border-color)',
-                                  background: 'var(--card-bg)',
-                                  color: 'var(--text-primary)',
-                                  fontSize: '12px'
-                                }}
-                              >
-                                <option value="user">Клиент (user)</option>
-                                <option value="admin">Администратор (admin)</option>
-                              </select>
-                            )}
-                          </td>
-                          <td>
-                            {u.email.toLowerCase() === 'admin@lavka.ru' || u.id === currentUser?.id ? (
-                              <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>—</span>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn btn-sm"
-                                style={{ color: 'var(--danger-color)' }}
-                                onClick={() => handleDeleteUser(u.id)}
-                                title="Удалить пользователя"
-                              >
-                                ✕
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            return (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h4 style={{ fontSize: '15px' }}>Управление пользователями и ролями ({users.length})</h4>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={loadUsers}>
+                    Обновить
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
+
+                <div style={{ marginBottom: '12px' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Поиск пользователей по имени, email, телефону или роли..."
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    style={{ fontSize: '13px', padding: '6px 10px' }}
+                  />
+                </div>
+
+                {loading ? (
+                  <p style={{ textAlign: 'center', padding: '20px' }}>Загрузка пользователей...</p>
+                ) : filteredUsers.length === 0 ? (
+                  <p style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
+                    {userSearch ? 'Пользователей по запросу не найдено' : 'Список пользователей пуст'}
+                  </p>
+                ) : (
+                  <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                    <table className="custom-table">
+                      <thead>
+                        <tr>
+                          <th>№</th>
+                          <th>Имя</th>
+                          <th>Email</th>
+                          <th>Телефон</th>
+                          <th>Роль</th>
+                          <th>Сменить роль</th>
+                          <th>Удалить</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredUsers.map((u, idx) => (
+                          <tr key={u.id}>
+                            <td>№ {idx + 1}</td>
+                            <td><strong>{u.name}</strong></td>
+                            <td>{u.email}</td>
+                            <td>{formatPhoneNumber(u.phone) || u.phone || '—'}</td>
+                            <td>
+                              <span className={`badge ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}`}>
+                                {u.role === 'admin' ? 'Администратор' : 'Клиент'}
+                              </span>
+                            </td>
+                            <td>
+                              {u.email.toLowerCase() === 'admin@lavka.ru' ? (
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                                  Главный администратор
+                                </span>
+                              ) : u.id === currentUser?.id ? (
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                                  Текущий аккаунт
+                                </span>
+                              ) : (
+                                <select
+                                  value={u.role}
+                                  onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                                  style={{
+                                    padding: '4px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border-color)',
+                                    background: 'var(--card-bg)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '12px'
+                                  }}
+                                >
+                                  <option value="user">Клиент (user)</option>
+                                  <option value="admin">Администратор (admin)</option>
+                                </select>
+                              )}
+                            </td>
+                            <td>
+                              {u.email.toLowerCase() === 'admin@lavka.ru' || u.id === currentUser?.id ? (
+                                <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>—</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  style={{ color: 'var(--danger-color)' }}
+                                  onClick={() => handleDeleteUser(u.id)}
+                                  title="Удалить пользователя"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="modal-footer">
@@ -1040,21 +1263,27 @@ export default function AdminPanel({
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
                     <label>Базовая цена (₽):</label>
                     <input
                       type="number"
+                      min="1"
                       className="form-control"
                       placeholder="2500"
                       value={sPrice}
                       onChange={(e) => setSPrice(e.target.value)}
                       required
                     />
+                    {sPrice !== '' && Number(sPrice) <= 0 && (
+                      <div style={{ fontSize: '11px', color: 'var(--danger-color)', marginTop: '4px', fontWeight: '500' }}>
+                        ⚠️ Цена должна быть строго больше 0 ₽
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group">
-                    <label>Скидка на услугу (% от 0 до 99):</label>
+                    <label>Скидка (%):</label>
                     <input
                       type="number"
                       min="0"
@@ -1066,7 +1295,23 @@ export default function AdminPanel({
                       onChange={(e) => setSDiscount(e.target.value)}
                     />
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      Введите от 0 до 99% (0 — без скидки)
+                      От 0 до 99%
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label>На складе (шт.):</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="form-control"
+                      placeholder="10"
+                      value={sStock}
+                      onChange={(e) => setSStock(e.target.value)}
+                      required
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      Остаток услуг/товаров
                     </div>
                   </div>
                 </div>
@@ -1173,13 +1418,61 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>URL изображения:</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="/images/services/styling.jpg"
-                    value={sImg}
-                    onChange={(e) => setSImg(e.target.value)}
-                  />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="/images/services/styling.jpg"
+                      value={sImg}
+                      onChange={(e) => setSImg(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => setSImg('/images/services/styling.jpg')}
+                      title="Вернуть стандартное фото"
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      Сброс
+                    </button>
+                    {sImg && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ color: 'var(--danger-color)', whiteSpace: 'nowrap' }}
+                        onClick={() => setSImg('')}
+                        title="Удалить фото"
+                      >
+                        Удалить
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Предпросмотр изображения прямо в модалке редактирования */}
+                  {sImg && (
+                    <div style={{
+                      marginTop: '10px',
+                      padding: '8px 12px',
+                      background: 'rgba(0,0,0,0.03)',
+                      borderRadius: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px'
+                    }}>
+                      <img
+                        src={sImg}
+                        alt="Предпросмотр"
+                        style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                        onError={(e) => { e.target.onerror = null; e.target.src = '/images/services/styling.jpg'; }}
+                      />
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '500' }}>Предпросмотр фотографии</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          Администратор может проверить корректность отображения перед сохранением
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1189,6 +1482,63 @@ export default function AdminPanel({
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Сохранить услугу
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Вложенная модалка редактирования категории */}
+      {isEditCatModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h3>Редактирование категории</h3>
+              <button type="button" className="modal-close-btn" onClick={() => setIsEditCatModalOpen(false)}>✕</button>
+            </div>
+            <form onSubmit={handleSaveEditCategory}>
+              <div className="modal-body">
+                {catModalError && (
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid var(--danger-color)',
+                    color: 'var(--danger-color)',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    marginBottom: '12px',
+                    fontSize: '13px'
+                  }}>
+                    ⚠️ {catModalError}
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>Название категории:</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={editCatName}
+                    onChange={(e) => setEditCatName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Описание категории:</label>
+                  <textarea
+                    className="form-control"
+                    rows="3"
+                    value={editCatDesc}
+                    onChange={(e) => setEditCatDesc(e.target.value)}
+                    style={{ resize: 'none' }}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setIsEditCatModalOpen(false)}>
+                  Отмена
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Сохранить категорию
                 </button>
               </div>
             </form>

@@ -114,7 +114,7 @@ export default function CartModal({
                     <div className="cart-item-info">
                       <div className="cart-item-title">{item.service_name}</div>
                       <div className="cart-item-category">
-                        {item.category_name} • ⏱ {formatDuration(item.duration)}
+                        {item.category_name} • ⏱ {formatDuration(item.duration)} • В наличии: {item.stock !== undefined ? item.stock : 10} шт.
                       </div>
                       <div style={{ fontSize: '13px', marginTop: '3px' }}>
                         {item.discount_percent > 0 ? (
@@ -154,9 +154,11 @@ export default function CartModal({
 
                       {(() => {
                         const itemDur = Number(item.duration) || 60;
+                        const itemStock = item.stock !== undefined ? Number(item.stock) : 10;
+                        const isStockLimit = item.quantity >= itemStock;
                         const isQtyLimit = item.quantity >= 3;
                         const isTimeLimit = (totalDuration + itemDur) > maxSessionMinutes;
-                        const isPlusDisabled = isQtyLimit || isTimeLimit;
+                        const isPlusDisabled = isStockLimit || isQtyLimit || isTimeLimit;
 
                         return (
                           <button
@@ -165,7 +167,9 @@ export default function CartModal({
                             onClick={() => onUpdateQty(item.service_id, item.quantity + 1)}
                             disabled={isPlusDisabled}
                             title={
-                              isQtyLimit
+                              isStockLimit
+                                ? `Достигнут максимальный остаток на складе (${itemStock} шт.)`
+                                : isQtyLimit
                                 ? "Один мастер не может выполнить более 3 одинаковых процедур за один визит"
                                 : isTimeLimit
                                 ? "Превышен лимит времени мастера на один визит (максимум 6 часов)"

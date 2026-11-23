@@ -738,6 +738,7 @@ function ServiceCard({
   const rating = Number(service.average_rating) || 0;
   const reviewsCount = service.reviews_count || 0;
   const duration = service.duration || service.duration_minutes || 60;
+  const stock = service.stock !== undefined ? Number(service.stock) : 10;
   const originalPrice = Number(service.price || 0);
   const discountPercent = Number(service.discount_percent || 0);
   const finalPrice = discountPercent > 0 ? Number(service.final_price !== undefined ? service.final_price : calculateFinalPrice(originalPrice, discountPercent)) : originalPrice;
@@ -787,6 +788,7 @@ function ServiceCard({
       marginBottom: '12px',
       display: 'flex',
       alignItems: 'center',
+      justifyContent: 'space-between',
       gap: '8px'
     }
   }, /*#__PURE__*/React.createElement("button", {
@@ -798,7 +800,13 @@ function ServiceCard({
       padding: '3px 8px'
     },
     title: "\u041F\u043E\u0441\u043C\u043E\u0442\u0440\u0435\u0442\u044C \u043E\u0442\u0437\u044B\u0432\u044B"
-  }, "\u0420\u0435\u0439\u0442\u0438\u043D\u0433: ", rating > 0 ? rating.toFixed(1) : 'нет оценок', " (", reviewsCount, " ", reviewsCount === 1 ? 'отзыв' : 'отзывов', ")")), /*#__PURE__*/React.createElement("div", {
+  }, "\u2605 ", rating > 0 ? rating.toFixed(1) : 'нет оценок', " (", reviewsCount, ")"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '12px',
+      fontWeight: '600',
+      color: stock > 0 ? stock <= 3 ? '#f59e0b' : 'var(--text-secondary)' : 'var(--danger-color)'
+    }
+  }, stock > 0 ? `Остаток: ${stock} шт.` : 'Нет в наличии')), /*#__PURE__*/React.createElement("div", {
     className: "service-card-footer"
   }, /*#__PURE__*/React.createElement("div", {
     className: "service-price"
@@ -816,8 +824,13 @@ function ServiceCard({
   }, formatPrice(originalPrice))), !isAdmin && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn btn-primary btn-sm",
-    onClick: () => onAddToCart(service)
-  }, "\u0412 \u043A\u043E\u0440\u0437\u0438\u043D\u0443"))));
+    onClick: () => onAddToCart(service),
+    disabled: stock <= 0,
+    style: stock <= 0 ? {
+      opacity: 0.5,
+      cursor: 'not-allowed'
+    } : {}
+  }, stock > 0 ? 'В корзину' : 'Распродано'))));
 }
 
 // Component: Catalog.jsx
@@ -882,7 +895,7 @@ function Catalog({
     onClick: () => onSelectCategory(cat.name)
   }, /*#__PURE__*/React.createElement("span", null, cat.name), /*#__PURE__*/React.createElement("span", {
     className: "count-badge"
-  }, cat.services_count || 0))), !safeCategories.some(c => c.name === 'Без категории') && safeServices.filter(s => !s.category_name || s.category_name === 'Без категории').length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, cat.services_count || 0))), !safeCategories.some(c => c.name === 'Без категории') && /*#__PURE__*/React.createElement("div", {
     className: `category-filter-item ${selectedCategory === 'Без категории' ? 'active' : ''}`,
     onClick: () => onSelectCategory('Без категории')
   }, /*#__PURE__*/React.createElement("span", null, "\u0411\u0435\u0437 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438"), /*#__PURE__*/React.createElement("span", {
@@ -1473,7 +1486,7 @@ function CartModal({
     className: "cart-item-title"
   }, item.service_name), /*#__PURE__*/React.createElement("div", {
     className: "cart-item-category"
-  }, item.category_name, " \u2022 \u23F1 ", formatDuration(item.duration)), /*#__PURE__*/React.createElement("div", {
+  }, item.category_name, " \u2022 \u23F1 ", formatDuration(item.duration), " \u2022 \u0412 \u043D\u0430\u043B\u0438\u0447\u0438\u0438: ", item.stock !== undefined ? item.stock : 10, " \u0448\u0442."), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: '13px',
       marginTop: '3px'
@@ -1513,15 +1526,17 @@ function CartModal({
     }
   }, item.quantity), (() => {
     const itemDur = Number(item.duration) || 60;
+    const itemStock = item.stock !== undefined ? Number(item.stock) : 10;
+    const isStockLimit = item.quantity >= itemStock;
     const isQtyLimit = item.quantity >= 3;
     const isTimeLimit = totalDuration + itemDur > maxSessionMinutes;
-    const isPlusDisabled = isQtyLimit || isTimeLimit;
+    const isPlusDisabled = isStockLimit || isQtyLimit || isTimeLimit;
     return /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "cart-qty-btn",
       onClick: () => onUpdateQty(item.service_id, item.quantity + 1),
       disabled: isPlusDisabled,
-      title: isQtyLimit ? "Один мастер не может выполнить более 3 одинаковых процедур за один визит" : isTimeLimit ? "Превышен лимит времени мастера на один визит (максимум 6 часов)" : "Увеличить количество",
+      title: isStockLimit ? `Достигнут максимальный остаток на складе (${itemStock} шт.)` : isQtyLimit ? "Один мастер не может выполнить более 3 одинаковых процедур за один визит" : isTimeLimit ? "Превышен лимит времени мастера на один визит (максимум 6 часов)" : "Увеличить количество",
       style: {
         opacity: isPlusDisabled ? 0.35 : 1,
         cursor: isPlusDisabled ? 'not-allowed' : 'pointer'
@@ -1597,7 +1612,7 @@ function CartModal({
 }
 
 // Component: CheckoutModal.jsx
-// Модальное окно оформления заказа с валидацией адреса и даты доставки
+// Модальное окно оформления заказа с валидацией адреса, даты доставки и промокодами
 function CheckoutModal({
   isOpen,
   onClose,
@@ -1611,6 +1626,12 @@ function CheckoutModal({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
+  // Промокод
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponMsg, setCouponMsg] = useState(null);
+
   // Минимальная дата доставки — сегодня
   const todayStr = new Date().toISOString().split('T')[0];
   useEffect(() => {
@@ -1621,7 +1642,40 @@ function CheckoutModal({
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setDeliveryDate(tomorrow.toISOString().split('T')[0]);
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponMsg(null);
   }, [user, isOpen]);
+  const handleApplyCoupon = async e => {
+    if (e) e.preventDefault();
+    if (!couponInput.trim()) {
+      setCouponMsg({
+        type: 'error',
+        text: 'Введите промокод'
+      });
+      return;
+    }
+    try {
+      setCouponLoading(true);
+      setCouponMsg(null);
+      const res = await validateCoupon(couponInput.trim());
+      setAppliedCoupon(res);
+      setCouponMsg({
+        type: 'success',
+        text: `Промокод "${res.code}" применен! Скидка: -${res.discount_percent}%`
+      });
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponMsg({
+        type: 'error',
+        text: err.message || 'Промокод не найден'
+      });
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+  const discountAmount = appliedCoupon ? Math.round(cartTotal * (appliedCoupon.discount_percent / 100)) : 0;
+  const finalTotal = Math.max(0, cartTotal - discountAmount);
   const handleSubmit = async e => {
     e.preventDefault();
     setErrorMsg(null);
@@ -1649,7 +1703,8 @@ function CheckoutModal({
       setLoading(true);
       const res = await createOrder({
         delivery_address: deliveryAddress.trim(),
-        delivery_date: deliveryDate
+        delivery_date: deliveryDate,
+        coupon_code: appliedCoupon ? appliedCoupon.code : null
       });
       alert(res.message);
       if (onOrderSuccess) onOrderSuccess(res.order);
@@ -1705,13 +1760,74 @@ function CheckoutModal({
     style: {
       display: 'flex',
       justifyContent: 'space-between',
-      fontSize: '15px'
+      marginBottom: '6px',
+      fontSize: '14px'
     }
-  }, /*#__PURE__*/React.createElement("span", null, "\u0421\u0443\u043C\u043C\u0430 \u043A \u043E\u043F\u043B\u0430\u0442\u0435:"), /*#__PURE__*/React.createElement("strong", {
+  }, /*#__PURE__*/React.createElement("span", null, "\u0421\u0443\u043C\u043C\u0430 \u0431\u0435\u0437 \u043F\u0440\u043E\u043C\u043E\u043A\u043E\u0434\u0430:"), /*#__PURE__*/React.createElement("span", null, cartTotal.toLocaleString('ru-RU'), " \u20BD")), appliedCoupon && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      marginBottom: '6px',
+      fontSize: '14px',
+      color: '#16a34a'
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "\u041F\u0440\u043E\u043C\u043E\u043A\u043E\u0434 (", appliedCoupon.code, " -", appliedCoupon.discount_percent, "%):"), /*#__PURE__*/React.createElement("strong", null, "-", discountAmount.toLocaleString('ru-RU'), " \u20BD")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      fontSize: '16px',
+      borderTop: '1px solid var(--border-color)',
+      paddingTop: '6px',
+      marginTop: '4px'
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "\u0418\u0442\u043E\u0433\u043E \u043A \u043E\u043F\u043B\u0430\u0442\u0435:"), /*#__PURE__*/React.createElement("strong", {
     style: {
       color: 'var(--accent-color)'
     }
-  }, typeof formatPrice === 'function' ? formatPrice(cartTotal) : `${cartTotal} ₽`))), /*#__PURE__*/React.createElement("div", {
+  }, finalTotal.toLocaleString('ru-RU'), " \u20BD"))), /*#__PURE__*/React.createElement("div", {
+    className: "form-group",
+    style: {
+      marginBottom: '16px'
+    }
+  }, /*#__PURE__*/React.createElement("label", null, "\u041F\u0440\u043E\u043C\u043E\u043A\u043E\u0434 \u043D\u0430 \u0441\u043A\u0438\u0434\u043A\u0443:"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: '8px'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    className: "form-control",
+    placeholder: "LAVKA10, BEAUTY15, STUDENT20",
+    value: couponInput,
+    onChange: e => setCouponInput(e.target.value.toUpperCase()),
+    style: {
+      textTransform: 'uppercase',
+      letterSpacing: '1px',
+      fontWeight: 'bold'
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn btn-outline",
+    onClick: handleApplyCoupon,
+    disabled: couponLoading || !couponInput.trim(),
+    style: {
+      whiteSpace: 'nowrap'
+    }
+  }, couponLoading ? '...' : 'Применить')), couponMsg && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '12px',
+      marginTop: '4px',
+      color: couponMsg.type === 'success' ? '#16a34a' : 'var(--danger-color)',
+      fontWeight: '500'
+    }
+  }, couponMsg.text), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-secondary)',
+      display: 'block',
+      marginTop: '3px'
+    }
+  }, "\u0410\u043A\u0442\u0438\u0432\u043D\u044B\u0435 \u043F\u0440\u043E\u043C\u043E\u043A\u043E\u0434\u044B: ", /*#__PURE__*/React.createElement("strong", null, "LAVKA10"), " (-10%), ", /*#__PURE__*/React.createElement("strong", null, "BEAUTY15"), " (-15%), ", /*#__PURE__*/React.createElement("strong", null, "STUDENT20"), " (-20%)")), /*#__PURE__*/React.createElement("div", {
     className: "form-group"
   }, /*#__PURE__*/React.createElement("label", null, "\u0410\u0434\u0440\u0435\u0441 \u0434\u043E\u0441\u0442\u0430\u0432\u043A\u0438 / \u0432\u044B\u0435\u0437\u0434\u0430 \u043C\u0430\u0441\u0442\u0435\u0440\u0430:"), /*#__PURE__*/React.createElement("input", {
     type: "text",
@@ -1760,7 +1876,7 @@ function CheckoutModal({
     type: "submit",
     className: "btn btn-primary",
     disabled: loading
-  }, loading ? 'Сохранение заказа на сервере...' : `Подтвердить заказ (${typeof formatPrice === 'function' ? formatPrice(cartTotal) : `${cartTotal} ₽`})`)))));
+  }, loading ? 'Сохранение заказа на сервере...' : `Подтвердить заказ (${finalTotal.toLocaleString('ru-RU')} ₽)`)))));
 }
 
 // Component: AuthModal.jsx
@@ -2316,6 +2432,31 @@ function ProfileModal({
   const handleInfoSubmit = async e => {
     e.preventDefault();
     setInfoMsg(null);
+    const trimmedName = name.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      setInfoMsg({
+        type: 'error',
+        text: 'Имя должно содержать не менее 2 символов'
+      });
+      return;
+    }
+    const nameRegex = /^[a-zA-Zа-яА-ЯёЁ\s\-]+$/;
+    if (!nameRegex.test(trimmedName)) {
+      setInfoMsg({
+        type: 'error',
+        text: 'Имя может содержать только буквы, дефисы и пробелы'
+      });
+      return;
+    }
+    const trimmedEmail = email.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
+      setInfoMsg({
+        type: 'error',
+        text: 'Введите корректный адрес электронной почты (Email)'
+      });
+      return;
+    }
     const phoneDigits = phone ? phone.replace(/\D/g, '') : '';
     if (phone && phoneDigits.length !== 11) {
       setInfoMsg({
@@ -2324,13 +2465,21 @@ function ProfileModal({
       });
       return;
     }
+    const trimmedAddress = address.trim();
+    if (trimmedAddress && trimmedAddress.length < 5) {
+      setInfoMsg({
+        type: 'error',
+        text: 'Адрес должен содержать не менее 5 символов'
+      });
+      return;
+    }
     try {
       setInfoSaving(true);
       const res = await updateProfile({
-        name: name.trim(),
-        email: email.trim(),
+        name: trimmedName,
+        email: trimmedEmail,
         phone: phone.trim(),
-        default_address: address.trim()
+        default_address: trimmedAddress
       });
       localStorage.setItem('token', res.token);
       onProfileUpdated(res.user);
@@ -2444,13 +2593,25 @@ function ProfileModal({
     key: o.id
   }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, "\u2116 ", index + 1)), /*#__PURE__*/React.createElement("td", null, new Date(o.delivery_date).toLocaleDateString('ru-RU')), /*#__PURE__*/React.createElement("td", null, o.delivery_address), /*#__PURE__*/React.createElement("td", {
     style: {
-      maxWidth: '200px'
+      maxWidth: '240px'
     }
-  }, /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: '13px'
+      fontSize: '13px',
+      fontWeight: '500'
     }
-  }, o.items_summary)), /*#__PURE__*/React.createElement("td", {
+  }, o.items_summary), o.coupon_code && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'inline-block',
+      marginTop: '4px',
+      padding: '2px 6px',
+      borderRadius: '4px',
+      background: 'rgba(34, 197, 94, 0.15)',
+      color: '#16a34a',
+      fontSize: '11px',
+      fontWeight: '600'
+    }
+  }, "\uD83C\uDF9F \u041A\u0443\u043F\u043E\u043D: ", o.coupon_code, " (-", Number(o.discount_amount).toLocaleString('ru-RU'), " \u20BD)")), /*#__PURE__*/React.createElement("td", {
     style: {
       fontWeight: 'bold',
       color: 'var(--accent-color)'
@@ -2604,12 +2765,19 @@ function AdminPanel({
   const [panelSuccess, setPanelSuccess] = useState(null);
   const [serviceModalError, setServiceModalError] = useState(null);
 
-  // Модалка добавления/редактирования услуги (длительность в часах и минутах + скидка)
+  // Поиск по каждой вкладке админ-панели
+  const [orderSearch, setOrderSearch] = useState('');
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [catSearch, setCatSearch] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+
+  // Модалка добавления/редактирования услуги (длительность в часах и минутах + скидка + склад)
   const [editingService, setEditingService] = useState(null);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [sName, setSName] = useState('');
   const [sCat, setSCat] = useState('');
   const [sPrice, setSPrice] = useState('');
+  const [sStock, setSStock] = useState(10);
   const [sHours, setSHours] = useState(1);
   const [sMinutes, setSMinutes] = useState(0);
   const [sDiscount, setSDiscount] = useState(0);
@@ -2617,11 +2785,18 @@ function AdminPanel({
   const [sImg, setSImg] = useState('');
   const [sNewCatName, setSNewCatName] = useState('');
 
+  // Редактирование существующей категории
+  const [editingCat, setEditingCat] = useState(null);
+  const [isEditCatModalOpen, setIsEditCatModalOpen] = useState(false);
+  const [editCatName, setEditCatName] = useState('');
+  const [editCatDesc, setEditCatDesc] = useState('');
+  const [catModalError, setCatModalError] = useState(null);
+
   // Поиск и фильтрация отзывов в панели админа
   const [revSearch, setRevSearch] = useState('');
   const [revRating, setRevRating] = useState('all');
 
-  // Модалка добавления категории
+  // Форма добавления новой категории
   const [catName, setCatName] = useState('');
   const [catDesc, setCatDesc] = useState('');
 
@@ -2764,6 +2939,7 @@ function AdminPanel({
     setSCat(firstCat ? firstCat.name : categories.length > 0 ? categories[0].name : 'Без категории');
     setSNewCatName('');
     setSPrice('');
+    setSStock(10);
     setSHours(1);
     setSMinutes(0);
     setSDiscount(0);
@@ -2780,6 +2956,7 @@ function AdminPanel({
     setSCat(s.category_name || 'Без категории');
     setSNewCatName('');
     setSPrice(s.price);
+    setSStock(s.stock !== undefined ? s.stock : 10);
     const totalMins = Number(s.duration || s.duration_minutes || 60);
     setSHours(Math.floor(totalMins / 60));
     setSMinutes(totalMins % 60);
@@ -2795,6 +2972,10 @@ function AdminPanel({
     e.preventDefault();
     if (!sName || !sPrice) {
       setServiceModalError('Заполните обязательные поля (название и цена)');
+      return;
+    }
+    if (Number(sPrice) <= 0) {
+      setServiceModalError('Цена услуги должна быть строго больше 0 ₽');
       return;
     }
     const calculatedDuration = (parseInt(sHours, 10) || 0) * 60 + (parseInt(sMinutes, 10) || 0);
@@ -2821,6 +3002,13 @@ function AdminPanel({
       setServiceModalError('Ошибка: скидка не может быть 100% или больше (максимум 99%)');
       return;
     }
+
+    // Валидация остатка на складе
+    const stockVal = sStock === '' ? 10 : parseInt(sStock, 10);
+    if (isNaN(stockVal) || stockVal < 0) {
+      setServiceModalError('Количество на складе должно быть целым неотрицательным числом');
+      return;
+    }
     let finalCategoryName = sCat;
     if (sCat === '__new__') {
       if (!sNewCatName || !sNewCatName.trim()) {
@@ -2835,6 +3023,7 @@ function AdminPanel({
         name: sName.trim(),
         category_name: finalCategoryName,
         price: Number(sPrice),
+        stock: stockVal,
         duration: calculatedDuration,
         discount_percent: discountVal,
         description: sDesc.trim(),
@@ -2872,6 +3061,41 @@ function AdminPanel({
     }
   };
 
+  // Редактирование существующей категории
+  const handleOpenEditCategory = cat => {
+    if (cat.name === 'Без категории') {
+      setPanelError('Системную категорию «Без категории» нельзя редактировать или переименовывать');
+      return;
+    }
+    setEditingCat(cat);
+    setEditCatName(cat.name);
+    setEditCatDesc(cat.description || '');
+    setCatModalError(null);
+    setIsEditCatModalOpen(true);
+  };
+  const handleSaveEditCategory = async e => {
+    e.preventDefault();
+    if (!editCatName.trim()) {
+      setCatModalError('Название категории обязательно');
+      return;
+    }
+    try {
+      setCatModalError(null);
+      await updateCategory(editingCat.id, {
+        name: editCatName.trim(),
+        description: editCatDesc.trim()
+      });
+      setIsEditCatModalOpen(false);
+      setEditingCat(null);
+      if (onCategoriesChanged) onCategoriesChanged();
+      if (onServicesChanged) onServicesChanged();
+      setPanelSuccess('Категория успешно обновлена');
+      setTimeout(() => setPanelSuccess(null), 3000);
+    } catch (e) {
+      setCatModalError(e.message || 'Ошибка обновления категории');
+    }
+  };
+
   // Добавление новой категории
   const handleAddCategory = async e => {
     e.preventDefault();
@@ -2893,14 +3117,18 @@ function AdminPanel({
   };
 
   // Удаление категории
-  const handleDeleteCategory = async id => {
-    if (!window.confirm('Удалить категорию? Услуги из этой категории будут сохранены и перенесены в раздел «Без категории».')) return;
+  const handleDeleteCategory = async (id, catName) => {
+    if (catName === 'Без категории') {
+      setPanelError('Системную категорию «Без категории» нельзя удалить, она должна присутствовать всегда');
+      return;
+    }
+    if (!window.confirm('Удалить категорию? Услуги из этой категории будут сохранены и автоматически перенесены в категорию «Без категории».')) return;
     try {
       setPanelError(null);
       await deleteCategory(id);
       if (onCategoriesChanged) onCategoriesChanged();
       if (onServicesChanged) onServicesChanged();
-      setPanelSuccess('Категория удалена. Услуги перенесены в раздел «Без категории»');
+      setPanelSuccess('Категория удалена. Все товары автоматически перенесены в раздел «Без категории»');
       setTimeout(() => setPanelSuccess(null), 3000);
     } catch (e) {
       setPanelError(e.message || 'Ошибка удаления категории');
@@ -2986,165 +3214,292 @@ function AdminPanel({
       margin: '12px 0',
       fontSize: '13px'
     }
-  }, "\u2713 ", panelSuccess), activeTab === 'orders' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '12px'
-    }
-  }, /*#__PURE__*/React.createElement("h4", {
-    style: {
-      fontSize: '15px'
-    }
-  }, "\u0421\u043F\u0438\u0441\u043E\u043A \u043F\u043E\u0441\u0442\u0443\u043F\u0438\u0432\u0448\u0438\u0445 \u0437\u0430\u043A\u0430\u0437\u043E\u0432"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn btn-outline btn-sm",
-    onClick: loadOrders
-  }, "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A")), loading ? /*#__PURE__*/React.createElement("p", {
-    style: {
-      textAlign: 'center',
-      padding: '20px'
-    }
-  }, "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0437\u0430\u043A\u0430\u0437\u043E\u0432...") : orders.length === 0 ? /*#__PURE__*/React.createElement("p", {
-    style: {
-      textAlign: 'center',
-      padding: '20px',
-      color: 'var(--text-secondary)'
-    }
-  }, "\u0417\u0430\u043A\u0430\u0437\u043E\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442") : /*#__PURE__*/React.createElement("div", {
-    style: {
-      maxHeight: '420px',
-      overflowY: 'auto'
-    }
-  }, /*#__PURE__*/React.createElement("table", {
-    className: "custom-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "\u2116"), /*#__PURE__*/React.createElement("th", null, "\u041A\u043B\u0438\u0435\u043D\u0442"), /*#__PURE__*/React.createElement("th", null, "\u0422\u0435\u043B\u0435\u0444\u043E\u043D"), /*#__PURE__*/React.createElement("th", null, "\u0410\u0434\u0440\u0435\u0441 \u0434\u043E\u0441\u0442\u0430\u0432\u043A\u0438"), /*#__PURE__*/React.createElement("th", null, "\u0414\u0430\u0442\u0430 \u0434\u043E\u0441\u0442\u0430\u0432\u043A\u0438"), /*#__PURE__*/React.createElement("th", null, "\u0423\u0441\u043B\u0443\u0433\u0438 (\u0441 \u043A\u043E\u043B\u0438\u0447\u0435\u0441\u0442\u0432\u043E\u043C x2, x3)"), /*#__PURE__*/React.createElement("th", null, "\u0421\u0443\u043C\u043C\u0430"), /*#__PURE__*/React.createElement("th", null, "\u0421\u0442\u0430\u0442\u0443\u0441"))), /*#__PURE__*/React.createElement("tbody", null, orders.map((o, idx) => /*#__PURE__*/React.createElement("tr", {
-    key: o.id
-  }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, "\u2116 ", idx + 1)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, o.user_name), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: '11px',
-      color: 'var(--text-secondary)'
-    }
-  }, o.user_email)), /*#__PURE__*/React.createElement("td", null, formatPhoneNumber(o.user_phone) || o.user_phone || '—'), /*#__PURE__*/React.createElement("td", null, o.delivery_address), /*#__PURE__*/React.createElement("td", null, new Date(o.delivery_date).toLocaleDateString('ru-RU')), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: '13px',
-      color: 'var(--accent-color)',
-      fontWeight: '500'
-    }
-  }, o.items_summary)), /*#__PURE__*/React.createElement("td", {
-    style: {
-      fontWeight: 'bold'
-    }
-  }, Number(o.total_price).toLocaleString('ru-RU'), " \u20BD"), /*#__PURE__*/React.createElement("td", null, o.status === 'Выполнен' ? /*#__PURE__*/React.createElement("span", {
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '4px',
-      padding: '4px 8px',
-      borderRadius: '4px',
-      background: 'rgba(34, 197, 94, 0.15)',
-      color: '#22c55e',
-      fontWeight: '600',
-      fontSize: '12px'
-    },
-    title: "\u0417\u0430\u043A\u0430\u0437 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D (\u0440\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E)"
-  }, "\u2713 \u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D") : o.status === 'Отменен' ? /*#__PURE__*/React.createElement("span", {
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '4px',
-      padding: '4px 8px',
-      borderRadius: '4px',
-      background: 'rgba(239, 68, 68, 0.15)',
-      color: 'var(--danger-color)',
-      fontWeight: '600',
-      fontSize: '12px'
-    },
-    title: "\u0417\u0430\u043A\u0430\u0437 \u043E\u0442\u043C\u0435\u043D\u0435\u043D (\u0440\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E)"
-  }, "\u2715 \u041E\u0442\u043C\u0435\u043D\u0435\u043D") : /*#__PURE__*/React.createElement("select", {
-    value: o.status,
-    onChange: e => handleStatusChange(o.id, e.target.value),
-    style: {
-      padding: '4px 6px',
-      borderRadius: '4px',
-      border: '1px solid var(--border-color)',
-      background: 'var(--card-bg)',
-      color: 'var(--text-primary)',
-      fontSize: '12px'
-    }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: "\u041F\u0440\u0438\u043D\u044F\u0442"
-  }, "\u041F\u0440\u0438\u043D\u044F\u0442"), /*#__PURE__*/React.createElement("option", {
-    value: "\u0412 \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0435"
-  }, "\u0412 \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0435"), /*#__PURE__*/React.createElement("option", {
-    value: "\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D"
-  }, "\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D"), /*#__PURE__*/React.createElement("option", {
-    value: "\u041E\u0442\u043C\u0435\u043D\u0435\u043D"
-  }, "\u041E\u0442\u043C\u0435\u043D\u0435\u043D"))))))))), activeTab === 'services' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '14px'
-    }
-  }, /*#__PURE__*/React.createElement("h4", {
-    style: {
-      fontSize: '15px'
-    }
-  }, "\u0423\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043A\u0430\u0442\u0430\u043B\u043E\u0433\u043E\u043C \u0443\u0441\u043B\u0443\u0433"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn btn-primary btn-sm",
-    onClick: handleOpenAddService
-  }, "+ \u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043D\u043E\u0432\u0443\u044E \u0443\u0441\u043B\u0443\u0433\u0443")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      maxHeight: '420px',
-      overflowY: 'auto'
-    }
-  }, /*#__PURE__*/React.createElement("table", {
-    className: "custom-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "\u2116"), /*#__PURE__*/React.createElement("th", null, "\u0424\u043E\u0442\u043E"), /*#__PURE__*/React.createElement("th", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u0443\u0441\u043B\u0443\u0433\u0438"), /*#__PURE__*/React.createElement("th", null, "\u041A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044F"), /*#__PURE__*/React.createElement("th", null, "\u0414\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C"), /*#__PURE__*/React.createElement("th", null, "\u0426\u0435\u043D\u0430"), /*#__PURE__*/React.createElement("th", null, "\u0421\u043A\u0438\u0434\u043A\u0430"), /*#__PURE__*/React.createElement("th", null, "\u0420\u0435\u0439\u0442\u0438\u043D\u0433"), /*#__PURE__*/React.createElement("th", null, "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044F"))), /*#__PURE__*/React.createElement("tbody", null, services.map((s, idx) => {
-    const discount = Number(s.discount_percent || 0);
-    const origPrice = Number(s.price || 0);
-    const finalPrice = discount > 0 ? Number(s.final_price !== undefined ? s.final_price : calculateFinalPrice(origPrice, discount)) : origPrice;
-    return /*#__PURE__*/React.createElement("tr", {
-      key: s.id
-    }, /*#__PURE__*/React.createElement("td", null, "\u2116 ", idx + 1), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("img", {
-      src: s.image_url || '/images/services/styling.jpg',
-      alt: "",
+  }, "\u2713 ", panelSuccess), activeTab === 'orders' && (() => {
+    const filteredOrders = orders.filter(o => {
+      if (!orderSearch.trim()) return true;
+      const q = orderSearch.trim().toLowerCase();
+      return String(o.id).includes(q) || (o.user_name || '').toLowerCase().includes(q) || (o.user_email || '').toLowerCase().includes(q) || (o.user_phone || '').toLowerCase().includes(q) || (o.delivery_address || '').toLowerCase().includes(q) || (o.status || '').toLowerCase().includes(q) || (o.coupon_code || '').toLowerCase().includes(q) || (o.items_summary || '').toLowerCase().includes(q);
+    });
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       style: {
-        width: '40px',
-        height: '40px',
-        borderRadius: '4px',
-        objectFit: 'cover'
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '12px'
       }
-    })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, s.name)), /*#__PURE__*/React.createElement("td", null, s.category_name || 'Без категории'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("h4", {
       style: {
+        fontSize: '15px'
+      }
+    }, "\u0421\u043F\u0438\u0441\u043E\u043A \u043F\u043E\u0441\u0442\u0443\u043F\u0438\u0432\u0448\u0438\u0445 \u0437\u0430\u043A\u0430\u0437\u043E\u0432 (", orders.length, ")"), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn btn-outline btn-sm",
+      onClick: loadOrders
+    }, "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: '12px'
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      className: "form-control",
+      placeholder: "\u041F\u043E\u0438\u0441\u043A \u0437\u0430\u043A\u0430\u0437\u043E\u0432 \u043F\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u0443, email, \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0443, \u0430\u0434\u0440\u0435\u0441\u0443, \u0441\u0442\u0430\u0442\u0443\u0441\u0443 \u0438\u043B\u0438 \u043A\u0443\u043F\u043E\u043D\u0443...",
+      value: orderSearch,
+      onChange: e => setOrderSearch(e.target.value),
+      style: {
+        fontSize: '13px',
+        padding: '6px 10px'
+      }
+    })), loading ? /*#__PURE__*/React.createElement("p", {
+      style: {
+        textAlign: 'center',
+        padding: '20px'
+      }
+    }, "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0437\u0430\u043A\u0430\u0437\u043E\u0432...") : filteredOrders.length === 0 ? /*#__PURE__*/React.createElement("p", {
+      style: {
+        textAlign: 'center',
+        padding: '20px',
+        color: 'var(--text-secondary)'
+      }
+    }, orderSearch ? 'Ничего не найдено по запросу поиска' : 'Заказов пока нет') : /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxHeight: '420px',
+        overflowY: 'auto'
+      }
+    }, /*#__PURE__*/React.createElement("table", {
+      className: "custom-table"
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "\u2116"), /*#__PURE__*/React.createElement("th", null, "\u041A\u043B\u0438\u0435\u043D\u0442"), /*#__PURE__*/React.createElement("th", null, "\u0422\u0435\u043B\u0435\u0444\u043E\u043D"), /*#__PURE__*/React.createElement("th", null, "\u0410\u0434\u0440\u0435\u0441 \u0434\u043E\u0441\u0442\u0430\u0432\u043A\u0438"), /*#__PURE__*/React.createElement("th", null, "\u0414\u0430\u0442\u0430 \u0434\u043E\u0441\u0442\u0430\u0432\u043A\u0438"), /*#__PURE__*/React.createElement("th", null, "\u0423\u0441\u043B\u0443\u0433\u0438 (\u0441 \u043A\u043E\u043B\u0438\u0447\u0435\u0441\u0442\u0432\u043E\u043C x2, x3)"), /*#__PURE__*/React.createElement("th", null, "\u0421\u0443\u043C\u043C\u0430"), /*#__PURE__*/React.createElement("th", null, "\u0421\u0442\u0430\u0442\u0443\u0441"))), /*#__PURE__*/React.createElement("tbody", null, filteredOrders.map((o, idx) => /*#__PURE__*/React.createElement("tr", {
+      key: o.id
+    }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, "\u2116 ", idx + 1)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, o.user_name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: '11px',
+        color: 'var(--text-secondary)'
+      }
+    }, o.user_email)), /*#__PURE__*/React.createElement("td", null, formatPhoneNumber(o.user_phone) || o.user_phone || '—'), /*#__PURE__*/React.createElement("td", null, o.delivery_address), /*#__PURE__*/React.createElement("td", null, new Date(o.delivery_date).toLocaleDateString('ru-RU')), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '13px',
+        color: 'var(--accent-color)',
         fontWeight: '500'
       }
-    }, formatDuration(s.duration))), /*#__PURE__*/React.createElement("td", null, discount > 0 ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    }, o.items_summary), o.coupon_code && /*#__PURE__*/React.createElement("div", {
       style: {
-        textDecoration: 'line-through',
-        color: 'var(--text-secondary)',
+        display: 'inline-block',
+        marginTop: '4px',
+        padding: '2px 6px',
+        borderRadius: '4px',
+        background: 'rgba(34, 197, 94, 0.15)',
+        color: '#16a34a',
         fontSize: '11px',
-        display: 'block'
+        fontWeight: '600'
       }
-    }, formatPrice(origPrice)), /*#__PURE__*/React.createElement("strong", {
-      style: {
-        color: '#ef4444'
-      }
-    }, formatPrice(finalPrice))) : /*#__PURE__*/React.createElement("strong", {
+    }, "\uD83C\uDF9F \u041A\u0443\u043F\u043E\u043D: ", o.coupon_code, " (-", Number(o.discount_amount).toLocaleString('ru-RU'), " \u20BD)")), /*#__PURE__*/React.createElement("td", {
       style: {
         fontWeight: 'bold'
       }
-    }, formatPrice(origPrice))), /*#__PURE__*/React.createElement("td", null, discount > 0 ? /*#__PURE__*/React.createElement("span", {
-      className: "badge-discount"
-    }, "-", discount, "%") : /*#__PURE__*/React.createElement("span", {
+    }, Number(o.total_price).toLocaleString('ru-RU'), " \u20BD"), /*#__PURE__*/React.createElement("td", null, o.status === 'Выполнен' ? /*#__PURE__*/React.createElement("span", {
       style: {
-        color: 'var(--text-secondary)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        padding: '4px 8px',
+        borderRadius: '4px',
+        background: 'rgba(34, 197, 94, 0.15)',
+        color: '#22c55e',
+        fontWeight: '600',
+        fontSize: '12px'
+      },
+      title: "\u0417\u0430\u043A\u0430\u0437 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D (\u0440\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E)"
+    }, "\u2713 \u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D") : o.status === 'Отменен' ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        padding: '4px 8px',
+        borderRadius: '4px',
+        background: 'rgba(239, 68, 68, 0.15)',
+        color: 'var(--danger-color)',
+        fontWeight: '600',
+        fontSize: '12px'
+      },
+      title: "\u0417\u0430\u043A\u0430\u0437 \u043E\u0442\u043C\u0435\u043D\u0435\u043D (\u0440\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E)"
+    }, "\u2715 \u041E\u0442\u043C\u0435\u043D\u0435\u043D") : /*#__PURE__*/React.createElement("select", {
+      value: o.status,
+      onChange: e => handleStatusChange(o.id, e.target.value),
+      style: {
+        padding: '4px 6px',
+        borderRadius: '4px',
+        border: '1px solid var(--border-color)',
+        background: 'var(--card-bg)',
+        color: 'var(--text-primary)',
         fontSize: '12px'
       }
-    }, "\u2014")), /*#__PURE__*/React.createElement("td", null, Number(s.average_rating) > 0 ? Number(s.average_rating).toFixed(1) : '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("option", {
+      value: "\u041F\u0440\u0438\u043D\u044F\u0442"
+    }, "\u041F\u0440\u0438\u043D\u044F\u0442"), /*#__PURE__*/React.createElement("option", {
+      value: "\u0412 \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0435"
+    }, "\u0412 \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0435"), /*#__PURE__*/React.createElement("option", {
+      value: "\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D"
+    }, "\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D"), /*#__PURE__*/React.createElement("option", {
+      value: "\u041E\u0442\u043C\u0435\u043D\u0435\u043D"
+    }, "\u041E\u0442\u043C\u0435\u043D\u0435\u043D")))))))));
+  })(), activeTab === 'services' && (() => {
+    const filteredServices = services.filter(s => {
+      if (!serviceSearch.trim()) return true;
+      const q = serviceSearch.trim().toLowerCase();
+      return (s.name || '').toLowerCase().includes(q) || (s.category_name || '').toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q);
+    });
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '14px'
+      }
+    }, /*#__PURE__*/React.createElement("h4", {
+      style: {
+        fontSize: '15px'
+      }
+    }, "\u0423\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043A\u0430\u0442\u0430\u043B\u043E\u0433\u043E\u043C \u0443\u0441\u043B\u0443\u0433 (", services.length, ")"), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn btn-primary btn-sm",
+      onClick: handleOpenAddService
+    }, "+ \u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043D\u043E\u0432\u0443\u044E \u0443\u0441\u043B\u0443\u0433\u0443")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: '12px'
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      className: "form-control",
+      placeholder: "\u041F\u043E\u0438\u0441\u043A \u0443\u0441\u043B\u0443\u0433 \u043F\u043E \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u044E, \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438 \u0438\u043B\u0438 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u044E...",
+      value: serviceSearch,
+      onChange: e => setServiceSearch(e.target.value),
+      style: {
+        fontSize: '13px',
+        padding: '6px 10px'
+      }
+    })), filteredServices.length === 0 ? /*#__PURE__*/React.createElement("p", {
+      style: {
+        textAlign: 'center',
+        padding: '20px',
+        color: 'var(--text-secondary)'
+      }
+    }, serviceSearch ? 'Услуг по запросу поиска не найдено' : 'Каталог услуг пуст') : /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxHeight: '420px',
+        overflowY: 'auto'
+      }
+    }, /*#__PURE__*/React.createElement("table", {
+      className: "custom-table"
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "\u2116"), /*#__PURE__*/React.createElement("th", null, "\u0424\u043E\u0442\u043E"), /*#__PURE__*/React.createElement("th", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u0443\u0441\u043B\u0443\u0433\u0438"), /*#__PURE__*/React.createElement("th", null, "\u041A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044F"), /*#__PURE__*/React.createElement("th", null, "\u0421\u043A\u043B\u0430\u0434"), /*#__PURE__*/React.createElement("th", null, "\u0414\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C"), /*#__PURE__*/React.createElement("th", null, "\u0426\u0435\u043D\u0430"), /*#__PURE__*/React.createElement("th", null, "\u0421\u043A\u0438\u0434\u043A\u0430"), /*#__PURE__*/React.createElement("th", null, "\u0420\u0435\u0439\u0442\u0438\u043D\u0433"), /*#__PURE__*/React.createElement("th", null, "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044F"))), /*#__PURE__*/React.createElement("tbody", null, filteredServices.map((s, idx) => {
+      const discount = Number(s.discount_percent || 0);
+      const origPrice = Number(s.price || 0);
+      const finalPrice = discount > 0 ? Number(s.final_price !== undefined ? s.final_price : calculateFinalPrice(origPrice, discount)) : origPrice;
+      return /*#__PURE__*/React.createElement("tr", {
+        key: s.id
+      }, /*#__PURE__*/React.createElement("td", null, "\u2116 ", idx + 1), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("img", {
+        src: s.image_url || '/images/services/styling.jpg',
+        alt: "",
+        style: {
+          width: '40px',
+          height: '40px',
+          borderRadius: '4px',
+          objectFit: 'cover'
+        }
+      })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, s.name)), /*#__PURE__*/React.createElement("td", null, s.category_name || 'Без категории'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontWeight: '600',
+          color: (s.stock !== undefined ? s.stock : 10) > 0 ? 'var(--text-primary)' : 'var(--danger-color)'
+        }
+      }, s.stock !== undefined ? `${s.stock} шт.` : '10 шт.')), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontWeight: '500'
+        }
+      }, formatDuration(s.duration))), /*#__PURE__*/React.createElement("td", null, discount > 0 ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+        style: {
+          textDecoration: 'line-through',
+          color: 'var(--text-secondary)',
+          fontSize: '11px',
+          display: 'block'
+        }
+      }, formatPrice(origPrice)), /*#__PURE__*/React.createElement("strong", {
+        style: {
+          color: '#ef4444'
+        }
+      }, formatPrice(finalPrice))) : /*#__PURE__*/React.createElement("strong", {
+        style: {
+          fontWeight: 'bold'
+        }
+      }, formatPrice(origPrice))), /*#__PURE__*/React.createElement("td", null, discount > 0 ? /*#__PURE__*/React.createElement("span", {
+        className: "badge-discount"
+      }, "-", discount, "%") : /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: 'var(--text-secondary)',
+          fontSize: '12px'
+        }
+      }, "\u2014")), /*#__PURE__*/React.createElement("td", null, Number(s.average_rating) > 0 ? Number(s.average_rating).toFixed(1) : '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          gap: '6px'
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        className: "btn btn-outline btn-sm",
+        onClick: () => handleOpenEditService(s)
+      }, "\u0420\u0435\u0434."), /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        className: "btn btn-sm",
+        style: {
+          color: 'var(--danger-color)'
+        },
+        onClick: () => handleDeleteService(s.id)
+      }, "\u0423\u0434\u0430\u043B."))));
+    })))));
+  })(), activeTab === 'categories' && (() => {
+    const filteredCategories = categories.filter(c => {
+      if (!catSearch.trim()) return true;
+      const q = catSearch.trim().toLowerCase();
+      return (c.name || '').toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q);
+    });
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: '14px'
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      className: "form-control",
+      placeholder: "\u041F\u043E\u0438\u0441\u043A \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0439 \u043F\u043E \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u044E \u0438\u043B\u0438 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u044E...",
+      value: catSearch,
+      onChange: e => setCatSearch(e.target.value),
+      style: {
+        fontSize: '13px',
+        padding: '6px 10px'
+      }
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '1.2fr 0.8fr',
+        gap: '20px'
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h4", {
+      style: {
+        fontSize: '15px',
+        marginBottom: '12px'
+      }
+    }, "\u0421\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438 (", categories.length, ")"), /*#__PURE__*/React.createElement("table", {
+      className: "custom-table"
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438"), /*#__PURE__*/React.createElement("th", null, "\u0423\u0441\u043B\u0443\u0433"), /*#__PURE__*/React.createElement("th", null, "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044F"))), /*#__PURE__*/React.createElement("tbody", null, filteredCategories.map(c => /*#__PURE__*/React.createElement("tr", {
+      key: c.id || c.name
+    }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, c.name), c.description && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: '11px',
+        color: 'var(--text-secondary)'
+      }
+    }, c.description)), /*#__PURE__*/React.createElement("td", null, c.services_count || 0), /*#__PURE__*/React.createElement("td", null, c.name === 'Без категории' ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '11px',
+        color: 'var(--text-secondary)',
+        fontStyle: 'italic'
+      }
+    }, "\u0421\u0438\u0441\u0442\u0435\u043C\u043D\u0430\u044F") : /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         gap: '6px'
@@ -3152,81 +3507,56 @@ function AdminPanel({
     }, /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "btn btn-outline btn-sm",
-      onClick: () => handleOpenEditService(s)
-    }, "\u0420\u0435\u0434."), /*#__PURE__*/React.createElement("button", {
+      onClick: () => handleOpenEditCategory(c),
+      title: "\u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E"
+    }, "\u270F\uFE0F"), /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "btn btn-sm",
       style: {
         color: 'var(--danger-color)'
       },
-      onClick: () => handleDeleteService(s.id)
-    }, "\u0423\u0434\u0430\u043B."))));
-  }))))), activeTab === 'categories' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: '20px'
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h4", {
-    style: {
-      fontSize: '15px',
-      marginBottom: '12px'
-    }
-  }, "\u0421\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438"), /*#__PURE__*/React.createElement("table", {
-    className: "custom-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438"), /*#__PURE__*/React.createElement("th", null, "\u0423\u0441\u043B\u0443\u0433"), /*#__PURE__*/React.createElement("th", null, "\u0423\u0434\u0430\u043B\u0438\u0442\u044C"))), /*#__PURE__*/React.createElement("tbody", null, categories.map(c => /*#__PURE__*/React.createElement("tr", {
-    key: c.id || c.name
-  }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, c.name)), /*#__PURE__*/React.createElement("td", null, c.services_count || 0), /*#__PURE__*/React.createElement("td", null, c.id ? /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn btn-sm",
-    style: {
-      color: 'var(--danger-color)'
-    },
-    onClick: () => handleDeleteCategory(c.id),
-    title: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E"
-  }, "\u2715") : /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--text-secondary)',
-      fontSize: '12px'
-    }
-  }, "\u2014"))))))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: 'rgba(0,0,0,0.02)',
-      padding: '16px',
-      borderRadius: '8px',
-      border: '1px solid var(--border-color)'
-    }
-  }, /*#__PURE__*/React.createElement("h4", {
-    style: {
-      fontSize: '15px',
-      marginBottom: '12px'
-    }
-  }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E"), /*#__PURE__*/React.createElement("form", {
-    onSubmit: handleAddCategory
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "form-group"
-  }, /*#__PURE__*/React.createElement("label", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438:"), /*#__PURE__*/React.createElement("input", {
-    type: "text",
-    className: "form-control",
-    placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0421\u043F\u0430-\u043F\u0440\u043E\u0446\u0435\u0434\u0443\u0440\u044B",
-    value: catName,
-    onChange: e => setCatName(e.target.value),
-    required: true
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "form-group"
-  }, /*#__PURE__*/React.createElement("label", null, "\u041E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E):"), /*#__PURE__*/React.createElement("input", {
-    type: "text",
-    className: "form-control",
-    placeholder: "\u041A\u0440\u0430\u0442\u043A\u043E\u0435 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438...",
-    value: catDesc,
-    onChange: e => setCatDesc(e.target.value)
-  })), /*#__PURE__*/React.createElement("button", {
-    type: "submit",
-    className: "btn btn-primary btn-sm",
-    style: {
-      width: '100%'
-    }
-  }, "+ \u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E"))))), activeTab === 'reviews' && (() => {
+      onClick: () => handleDeleteCategory(c.id, c.name),
+      title: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E (\u0442\u043E\u0432\u0430\u0440\u044B \u043F\u0435\u0440\u0435\u0439\u0434\u0443\u0442 \u0432 \xAB\u0411\u0435\u0437 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438\xBB)"
+    }, "\u2715")))))))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: 'rgba(0,0,0,0.02)',
+        padding: '16px',
+        borderRadius: '8px',
+        border: '1px solid var(--border-color)',
+        height: 'fit-content'
+      }
+    }, /*#__PURE__*/React.createElement("h4", {
+      style: {
+        fontSize: '15px',
+        marginBottom: '12px'
+      }
+    }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E"), /*#__PURE__*/React.createElement("form", {
+      onSubmit: handleAddCategory
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "form-group"
+    }, /*#__PURE__*/React.createElement("label", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438:"), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      className: "form-control",
+      placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0421\u043F\u0430-\u043F\u0440\u043E\u0446\u0435\u0434\u0443\u0440\u044B",
+      value: catName,
+      onChange: e => setCatName(e.target.value),
+      required: true
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "form-group"
+    }, /*#__PURE__*/React.createElement("label", null, "\u041E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E):"), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      className: "form-control",
+      placeholder: "\u041A\u0440\u0430\u0442\u043A\u043E\u0435 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438...",
+      value: catDesc,
+      onChange: e => setCatDesc(e.target.value)
+    })), /*#__PURE__*/React.createElement("button", {
+      type: "submit",
+      className: "btn btn-primary btn-sm",
+      style: {
+        width: '100%'
+      }
+    }, "+ \u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E")))));
+  })(), activeTab === 'reviews' && (() => {
     const filteredReviews = reviews.filter(r => {
       if (revRating !== 'all' && Number(r.rating) !== Number(revRating)) {
         return false;
@@ -3369,78 +3699,105 @@ function AdminPanel({
       },
       onClick: () => handleDeleteReview(r.id)
     }, "\u0423\u0434\u0430\u043B\u0438\u0442\u044C"))))))));
-  })(), activeTab === 'users' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '12px'
-    }
-  }, /*#__PURE__*/React.createElement("h4", {
-    style: {
-      fontSize: '15px'
-    }
-  }, "\u0423\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044F\u043C\u0438 \u0438 \u0440\u043E\u043B\u044F\u043C\u0438"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn btn-outline btn-sm",
-    onClick: loadUsers
-  }, "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C")), loading ? /*#__PURE__*/React.createElement("p", {
-    style: {
-      textAlign: 'center',
-      padding: '20px'
-    }
-  }, "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439...") : /*#__PURE__*/React.createElement("div", {
-    style: {
-      maxHeight: '420px',
-      overflowY: 'auto'
-    }
-  }, /*#__PURE__*/React.createElement("table", {
-    className: "custom-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "\u2116"), /*#__PURE__*/React.createElement("th", null, "\u0418\u043C\u044F"), /*#__PURE__*/React.createElement("th", null, "Email"), /*#__PURE__*/React.createElement("th", null, "\u0422\u0435\u043B\u0435\u0444\u043E\u043D"), /*#__PURE__*/React.createElement("th", null, "\u0420\u043E\u043B\u044C"), /*#__PURE__*/React.createElement("th", null, "\u0421\u043C\u0435\u043D\u0438\u0442\u044C \u0440\u043E\u043B\u044C"), /*#__PURE__*/React.createElement("th", null, "\u0423\u0434\u0430\u043B\u0438\u0442\u044C"))), /*#__PURE__*/React.createElement("tbody", null, users.map((u, idx) => /*#__PURE__*/React.createElement("tr", {
-    key: u.id
-  }, /*#__PURE__*/React.createElement("td", null, "\u2116 ", idx + 1), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, u.name)), /*#__PURE__*/React.createElement("td", null, u.email), /*#__PURE__*/React.createElement("td", null, formatPhoneNumber(u.phone) || u.phone || '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
-    className: `badge ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}`
-  }, u.role === 'admin' ? 'Администратор' : 'Клиент')), /*#__PURE__*/React.createElement("td", null, u.email.toLowerCase() === 'admin@lavka.ru' ? /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: '11px',
-      color: 'var(--text-secondary)',
-      fontStyle: 'italic'
-    }
-  }, "\u0413\u043B\u0430\u0432\u043D\u044B\u0439 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440") : u.id === currentUser?.id ? /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: '11px',
-      color: 'var(--text-secondary)',
-      fontStyle: 'italic'
-    }
-  }, "\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u0430\u043A\u043A\u0430\u0443\u043D\u0442") : /*#__PURE__*/React.createElement("select", {
-    value: u.role,
-    onChange: e => handleRoleChange(u.id, e.target.value),
-    style: {
-      padding: '4px',
-      borderRadius: '4px',
-      border: '1px solid var(--border-color)',
-      background: 'var(--card-bg)',
-      color: 'var(--text-primary)',
-      fontSize: '12px'
-    }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: "user"
-  }, "\u041A\u043B\u0438\u0435\u043D\u0442 (user)"), /*#__PURE__*/React.createElement("option", {
-    value: "admin"
-  }, "\u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440 (admin)"))), /*#__PURE__*/React.createElement("td", null, u.email.toLowerCase() === 'admin@lavka.ru' || u.id === currentUser?.id ? /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--text-secondary)',
-      fontSize: '12px'
-    }
-  }, "\u2014") : /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn btn-sm",
-    style: {
-      color: 'var(--danger-color)'
-    },
-    onClick: () => handleDeleteUser(u.id),
-    title: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044F"
-  }, "\u2715"))))))))), /*#__PURE__*/React.createElement("div", {
+  })(), activeTab === 'users' && (() => {
+    const filteredUsers = users.filter(u => {
+      if (!userSearch.trim()) return true;
+      const q = userSearch.trim().toLowerCase();
+      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || (u.phone || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q);
+    });
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '12px'
+      }
+    }, /*#__PURE__*/React.createElement("h4", {
+      style: {
+        fontSize: '15px'
+      }
+    }, "\u0423\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044F\u043C\u0438 \u0438 \u0440\u043E\u043B\u044F\u043C\u0438 (", users.length, ")"), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn btn-outline btn-sm",
+      onClick: loadUsers
+    }, "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: '12px'
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      className: "form-control",
+      placeholder: "\u041F\u043E\u0438\u0441\u043A \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439 \u043F\u043E \u0438\u043C\u0435\u043D\u0438, email, \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0443 \u0438\u043B\u0438 \u0440\u043E\u043B\u0438...",
+      value: userSearch,
+      onChange: e => setUserSearch(e.target.value),
+      style: {
+        fontSize: '13px',
+        padding: '6px 10px'
+      }
+    })), loading ? /*#__PURE__*/React.createElement("p", {
+      style: {
+        textAlign: 'center',
+        padding: '20px'
+      }
+    }, "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439...") : filteredUsers.length === 0 ? /*#__PURE__*/React.createElement("p", {
+      style: {
+        textAlign: 'center',
+        padding: '20px',
+        color: 'var(--text-secondary)'
+      }
+    }, userSearch ? 'Пользователей по запросу не найдено' : 'Список пользователей пуст') : /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxHeight: '420px',
+        overflowY: 'auto'
+      }
+    }, /*#__PURE__*/React.createElement("table", {
+      className: "custom-table"
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "\u2116"), /*#__PURE__*/React.createElement("th", null, "\u0418\u043C\u044F"), /*#__PURE__*/React.createElement("th", null, "Email"), /*#__PURE__*/React.createElement("th", null, "\u0422\u0435\u043B\u0435\u0444\u043E\u043D"), /*#__PURE__*/React.createElement("th", null, "\u0420\u043E\u043B\u044C"), /*#__PURE__*/React.createElement("th", null, "\u0421\u043C\u0435\u043D\u0438\u0442\u044C \u0440\u043E\u043B\u044C"), /*#__PURE__*/React.createElement("th", null, "\u0423\u0434\u0430\u043B\u0438\u0442\u044C"))), /*#__PURE__*/React.createElement("tbody", null, filteredUsers.map((u, idx) => /*#__PURE__*/React.createElement("tr", {
+      key: u.id
+    }, /*#__PURE__*/React.createElement("td", null, "\u2116 ", idx + 1), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("strong", null, u.name)), /*#__PURE__*/React.createElement("td", null, u.email), /*#__PURE__*/React.createElement("td", null, formatPhoneNumber(u.phone) || u.phone || '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+      className: `badge ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}`
+    }, u.role === 'admin' ? 'Администратор' : 'Клиент')), /*#__PURE__*/React.createElement("td", null, u.email.toLowerCase() === 'admin@lavka.ru' ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '11px',
+        color: 'var(--text-secondary)',
+        fontStyle: 'italic'
+      }
+    }, "\u0413\u043B\u0430\u0432\u043D\u044B\u0439 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440") : u.id === currentUser?.id ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '11px',
+        color: 'var(--text-secondary)',
+        fontStyle: 'italic'
+      }
+    }, "\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u0430\u043A\u043A\u0430\u0443\u043D\u0442") : /*#__PURE__*/React.createElement("select", {
+      value: u.role,
+      onChange: e => handleRoleChange(u.id, e.target.value),
+      style: {
+        padding: '4px',
+        borderRadius: '4px',
+        border: '1px solid var(--border-color)',
+        background: 'var(--card-bg)',
+        color: 'var(--text-primary)',
+        fontSize: '12px'
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: "user"
+    }, "\u041A\u043B\u0438\u0435\u043D\u0442 (user)"), /*#__PURE__*/React.createElement("option", {
+      value: "admin"
+    }, "\u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440 (admin)"))), /*#__PURE__*/React.createElement("td", null, u.email.toLowerCase() === 'admin@lavka.ru' || u.id === currentUser?.id ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--text-secondary)',
+        fontSize: '12px'
+      }
+    }, "\u2014") : /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn btn-sm",
+      style: {
+        color: 'var(--danger-color)'
+      },
+      onClick: () => handleDeleteUser(u.id),
+      title: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044F"
+    }, "\u2715"))))))));
+  })()), /*#__PURE__*/React.createElement("div", {
     className: "modal-footer"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
@@ -3512,21 +3869,29 @@ function AdminPanel({
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
+      gridTemplateColumns: '1fr 1fr 1fr',
       gap: '12px'
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "form-group"
   }, /*#__PURE__*/React.createElement("label", null, "\u0411\u0430\u0437\u043E\u0432\u0430\u044F \u0446\u0435\u043D\u0430 (\u20BD):"), /*#__PURE__*/React.createElement("input", {
     type: "number",
+    min: "1",
     className: "form-control",
     placeholder: "2500",
     value: sPrice,
     onChange: e => setSPrice(e.target.value),
     required: true
-  })), /*#__PURE__*/React.createElement("div", {
+  }), sPrice !== '' && Number(sPrice) <= 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--danger-color)',
+      marginTop: '4px',
+      fontWeight: '500'
+    }
+  }, "\u26A0\uFE0F \u0426\u0435\u043D\u0430 \u0434\u043E\u043B\u0436\u043D\u0430 \u0431\u044B\u0442\u044C \u0441\u0442\u0440\u043E\u0433\u043E \u0431\u043E\u043B\u044C\u0448\u0435 0 \u20BD")), /*#__PURE__*/React.createElement("div", {
     className: "form-group"
-  }, /*#__PURE__*/React.createElement("label", null, "\u0421\u043A\u0438\u0434\u043A\u0430 \u043D\u0430 \u0443\u0441\u043B\u0443\u0433\u0443 (% \u043E\u0442 0 \u0434\u043E 99):"), /*#__PURE__*/React.createElement("input", {
+  }, /*#__PURE__*/React.createElement("label", null, "\u0421\u043A\u0438\u0434\u043A\u0430 (%):"), /*#__PURE__*/React.createElement("input", {
     type: "number",
     min: "0",
     max: "99",
@@ -3541,7 +3906,23 @@ function AdminPanel({
       color: 'var(--text-secondary)',
       marginTop: '4px'
     }
-  }, "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043E\u0442 0 \u0434\u043E 99% (0 \u2014 \u0431\u0435\u0437 \u0441\u043A\u0438\u0434\u043A\u0438)"))), sDiscount !== '' && (Number(sDiscount) < 0 || Number(sDiscount) >= 100) && /*#__PURE__*/React.createElement("div", {
+  }, "\u041E\u0442 0 \u0434\u043E 99%")), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "\u041D\u0430 \u0441\u043A\u043B\u0430\u0434\u0435 (\u0448\u0442.):"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "0",
+    className: "form-control",
+    placeholder: "10",
+    value: sStock,
+    onChange: e => setSStock(e.target.value),
+    required: true
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-secondary)',
+      marginTop: '4px'
+    }
+  }, "\u041E\u0441\u0442\u0430\u0442\u043E\u043A \u0443\u0441\u043B\u0443\u0433/\u0442\u043E\u0432\u0430\u0440\u043E\u0432"))), sDiscount !== '' && (Number(sDiscount) < 0 || Number(sDiscount) >= 100) && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '8px 12px',
       borderRadius: '6px',
@@ -3646,13 +4027,69 @@ function AdminPanel({
     }
   })), /*#__PURE__*/React.createElement("div", {
     className: "form-group"
-  }, /*#__PURE__*/React.createElement("label", null, "URL \u0438\u0437\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u044F:"), /*#__PURE__*/React.createElement("input", {
+  }, /*#__PURE__*/React.createElement("label", null, "URL \u0438\u0437\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u044F:"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: '8px'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
     type: "text",
     className: "form-control",
     placeholder: "/images/services/styling.jpg",
     value: sImg,
     onChange: e => setSImg(e.target.value)
-  }))), /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn btn-outline btn-sm",
+    onClick: () => setSImg('/images/services/styling.jpg'),
+    title: "\u0412\u0435\u0440\u043D\u0443\u0442\u044C \u0441\u0442\u0430\u043D\u0434\u0430\u0440\u0442\u043D\u043E\u0435 \u0444\u043E\u0442\u043E",
+    style: {
+      whiteSpace: 'nowrap'
+    }
+  }, "\u0421\u0431\u0440\u043E\u0441"), sImg && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn btn-sm",
+    style: {
+      color: 'var(--danger-color)',
+      whiteSpace: 'nowrap'
+    },
+    onClick: () => setSImg(''),
+    title: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u0444\u043E\u0442\u043E"
+  }, "\u0423\u0434\u0430\u043B\u0438\u0442\u044C")), sImg && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: '10px',
+      padding: '8px 12px',
+      background: 'rgba(0,0,0,0.03)',
+      borderRadius: '6px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px'
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    src: sImg,
+    alt: "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440",
+    style: {
+      width: '60px',
+      height: '60px',
+      objectFit: 'cover',
+      borderRadius: '6px',
+      border: '1px solid var(--border-color)'
+    },
+    onError: e => {
+      e.target.onerror = null;
+      e.target.src = '/images/services/styling.jpg';
+    }
+  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '13px',
+      fontWeight: '500'
+    }
+  }, "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u0444\u043E\u0442\u043E\u0433\u0440\u0430\u0444\u0438\u0438"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-secondary)'
+    }
+  }, "\u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440 \u043C\u043E\u0436\u0435\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E\u0441\u0442\u044C \u043E\u0442\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u044F \u043F\u0435\u0440\u0435\u0434 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u0435\u043C"))))), /*#__PURE__*/React.createElement("div", {
     className: "modal-footer"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
@@ -3661,7 +4098,65 @@ function AdminPanel({
   }, "\u041E\u0442\u043C\u0435\u043D\u0430"), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     className: "btn btn-primary"
-  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0443\u0441\u043B\u0443\u0433\u0443"))))));
+  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0443\u0441\u043B\u0443\u0433\u0443"))))), isEditCatModalOpen && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    style: {
+      zIndex: 1100
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-content",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: '480px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-header"
+  }, /*#__PURE__*/React.createElement("h3", null, "\u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "modal-close-btn",
+    onClick: () => setIsEditCatModalOpen(false)
+  }, "\u2715")), /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleSaveEditCategory
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-body"
+  }, catModalError && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'rgba(239, 68, 68, 0.15)',
+      border: '1px solid var(--danger-color)',
+      color: 'var(--danger-color)',
+      padding: '8px 12px',
+      borderRadius: '6px',
+      marginBottom: '12px',
+      fontSize: '13px'
+    }
+  }, "\u26A0\uFE0F ", catModalError), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438:"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    className: "form-control",
+    value: editCatName,
+    onChange: e => setEditCatName(e.target.value),
+    required: true
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "\u041E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438:"), /*#__PURE__*/React.createElement("textarea", {
+    className: "form-control",
+    rows: "3",
+    value: editCatDesc,
+    onChange: e => setEditCatDesc(e.target.value),
+    style: {
+      resize: 'none'
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "modal-footer"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn btn-outline",
+    onClick: () => setIsEditCatModalOpen(false)
+  }, "\u041E\u0442\u043C\u0435\u043D\u0430"), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    className: "btn btn-primary"
+  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E"))))));
 }
 
 // App.jsx

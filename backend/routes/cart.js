@@ -19,6 +19,7 @@ router.get('/', async (req, res) => {
         s.price,
         COALESCE(s.discount_percent, 0)::int AS discount_percent,
         ROUND(s.price * (1 - COALESCE(s.discount_percent, 0)::numeric / 100), 2)::numeric(10,2) AS final_price,
+        COALESCE(s.stock, 10)::int AS stock,
         s.image_url,
         COALESCE(c.name, 'Без категории') AS category_name,
         ci.quantity,
@@ -59,8 +60,8 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Количество должно быть больше нуля' });
     }
 
-    // Проверяем существование услуги
-    const serviceCheck = await db.query('SELECT id, name, duration_minutes FROM services WHERE id = $1', [service_id]);
+    // Проверяем существование услуги и остаток
+    const serviceCheck = await db.query('SELECT id, name, duration_minutes, COALESCE(stock, 10)::int AS stock FROM services WHERE id = $1', [service_id]);
     if (serviceCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Услуга не найдена' });
     }
@@ -76,6 +77,12 @@ router.post('/', async (req, res) => {
 
     const existingItem = currentCartRes.rows.find(i => i.service_id === Number(service_id));
     const newQty = (existingItem ? existingItem.quantity : 0) + qty;
+
+    if (newQty > service.stock) {
+      return res.status(400).json({
+        error: `На складе осталось только ${service.stock} шт. услуги "${service.name}". Вы не можете добавить больше.`
+      });
+    }
 
     // Лимит 1: не более 3 повторов одной процедуры за один визит
     if (newQty > 3) {
@@ -142,8 +149,18 @@ router.put('/:service_id', async (req, res) => {
       WHERE ci.user_id = $1
     `, [req.user.id]);
 
-    const targetService = await db.query('SELECT id, duration_minutes FROM services WHERE id = $1', [service_id]);
-    const serviceDur = targetService.rows.length > 0 ? (targetService.rows[0].duration_minutes || 60) : 60;
+    const targetService = await db.query('SELECT id, name, duration_minutes, COALESCE(stock, 10)::int AS stock FROM services WHERE id = $1', [service_id]);
+    if (targetService.rows.length === 0) {
+      return res.status(404).json({ error: 'Услуга не найдена' });
+    }
+    const serviceObj = targetService.rows[0];
+    const serviceDur = serviceObj.duration_minutes || 60;
+
+    if (qty > serviceObj.stock) {
+      return res.status(400).json({
+        error: `На складе доступно только ${serviceObj.stock} шт. услуги "${serviceObj.name}".`
+      });
+    }
 
     let totalDuration = 0;
     for (const item of currentCartRes.rows) {

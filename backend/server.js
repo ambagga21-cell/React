@@ -13,6 +13,7 @@ const cartRoutes = require('./routes/cart');
 const ordersRoutes = require('./routes/orders');
 const reviewsRoutes = require('./routes/reviews');
 const adminRoutes = require('./routes/admin');
+const couponsRoutes = require('./routes/coupons');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,6 +32,7 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/reviews', reviewsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/coupons', couponsRoutes);
 
 // Тестовый endpoint для проверки работоспособности API
 app.get('/api/test', (req, res) => {

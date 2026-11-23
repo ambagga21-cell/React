@@ -88,13 +88,22 @@ async function runTests() {
 
   // 6. Проверка корзины в БД
   console.log('6. Проверка работы корзины в базе данных...');
+  // Предварительно очищаем корзину для чистоты теста
+  await fetch('http://localhost:3001/api/cart', {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${userToken}` }
+  });
+
   // Добавляем 2 штуки услуги в корзину
   const addCartRes = await fetch('http://localhost:3001/api/cart', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
     body: JSON.stringify({ service_id: sampleServiceId, quantity: 2 })
   });
-  if (!addCartRes.ok) throw new Error('Ошибка добавления в корзину');
+  if (!addCartRes.ok) {
+    const errBody = await addCartRes.text();
+    throw new Error('Ошибка добавления в корзину: ' + addCartRes.status + ' ' + errBody);
+  }
 
   const getCartRes = await fetch('http://localhost:3001/api/cart', {
     headers: { 'Authorization': `Bearer ${userToken}` }

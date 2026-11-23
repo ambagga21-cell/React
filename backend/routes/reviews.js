@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { checkProfanity } = require('../utils/profanityFilter');
 
 // GET /api/reviews/service/:service_id - Получение всех отзывов по услуге (через JOIN с пользователем, с поддержкой поиска и фильтрации по оценке)
 router.get('/service/:service_id', async (req, res) => {
@@ -63,6 +64,12 @@ router.post('/', requireAuth, async (req, res) => {
 
     if (!comment || comment.trim().length < 3) {
       return res.status(400).json({ error: 'Текст отзыва должен содержать не менее 3 символов' });
+    }
+
+    // Проверка на нецензурную лексику (в т.ч. транслит)
+    const profCheck = checkProfanity(comment);
+    if (profCheck.hasProfanity) {
+      return res.status(400).json({ error: profCheck.error });
     }
 
     // Проверяем существование услуги

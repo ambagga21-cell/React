@@ -12,6 +12,7 @@ export default function ServiceCard({
   const rating = Number(service.average_rating) || 0;
   const reviewsCount = service.reviews_count || 0;
   const duration = service.duration || service.duration_minutes || 60;
+  const stock = service.stock !== undefined ? Number(service.stock) : 10;
   
   const originalPrice = Number(service.price || 0);
   const discountPercent = Number(service.discount_percent || 0);
@@ -63,8 +64,8 @@ export default function ServiceCard({
         {/* Описание */}
         <p className="service-card-desc">{service.description}</p>
 
-        {/* Рейтинг и отзывы */}
-        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Рейтинг, отзывы и наличие на складе */}
+        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
           <button
             type="button"
             className="btn btn-outline btn-sm"
@@ -72,8 +73,15 @@ export default function ServiceCard({
             style={{ fontSize: '12px', padding: '3px 8px' }}
             title="Посмотреть отзывы"
           >
-            Рейтинг: {rating > 0 ? rating.toFixed(1) : 'нет оценок'} ({reviewsCount} {reviewsCount === 1 ? 'отзыв' : 'отзывов'})
+            ★ {rating > 0 ? rating.toFixed(1) : 'нет оценок'} ({reviewsCount})
           </button>
+          <span style={{
+            fontSize: '12px',
+            fontWeight: '600',
+            color: stock > 0 ? (stock <= 3 ? '#f59e0b' : 'var(--text-secondary)') : 'var(--danger-color)'
+          }}>
+            {stock > 0 ? `Остаток: ${stock} шт.` : 'Нет в наличии'}
+          </span>
         </div>
 
         {/* Нижняя планка: цена (старая перечеркнута, новая выделена) и кнопка заказа */}
@@ -100,8 +108,10 @@ export default function ServiceCard({
               type="button"
               className="btn btn-primary btn-sm"
               onClick={() => onAddToCart(service)}
+              disabled={stock <= 0}
+              style={stock <= 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
             >
-              В корзину
+              {stock > 0 ? 'В корзину' : 'Распродано'}
             </button>
           )}
         </div>

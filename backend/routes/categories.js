@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
       FROM categories c
       LEFT JOIN services s ON c.id = s.category_id
       GROUP BY c.id, c.name, c.description
-      ORDER BY c.name ASC
+      ORDER BY CASE WHEN c.name = 'Без категории' THEN 1 ELSE 0 END, c.name ASC
     `);
 
     // Подсчитываем услуги без категории (category_id IS NULL)
@@ -26,12 +26,23 @@ router.get('/', async (req, res) => {
     `);
     const uncatCount = uncatRes.rows[0] ? parseInt(uncatRes.rows[0].services_count, 10) : 0;
 
-    const allCategories = [...result.rows];
-    if (uncatCount > 0) {
+    let hasUncatInDb = false;
+    const allCategories = result.rows.map(cat => {
+      if (cat.name === 'Без категории') {
+        hasUncatInDb = true;
+        return {
+          ...cat,
+          services_count: cat.services_count + uncatCount
+        };
+      }
+      return cat;
+    });
+
+    if (!hasUncatInDb) {
       allCategories.push({
         id: null,
         name: 'Без категории',
-        description: 'Услуги без назначенной категории',
+        description: 'Услуги и товары общего назначения',
         services_count: uncatCount
       });
     }
@@ -103,14 +114,23 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Сначала отвязываем все услуги от этой категории (переносим в "Без категории")
-    await db.query('UPDATE services SET category_id = NULL WHERE category_id = $1', [id]);
-
-    const result = await db.query('DELETE FROM categories WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) {
+    const catCheck = await db.query('SELECT name FROM categories WHERE id = $1', [id]);
+    if (catCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Категория не найдена' });
     }
-    res.json({ message: 'Категория успешно удалена, услуги перенесены в раздел «Без категории»' });
+    if (catCheck.rows[0].name === 'Без категории') {
+      return res.status(400).json({ error: 'Системную категорию «Без категории» нельзя удалить, она должна присутствовать всегда' });
+    }
+
+    // Сначала находим системную категорию "Без категории", чтобы перенести товары в нее
+    const uncatDb = await db.query("SELECT id FROM categories WHERE name = 'Без категории'");
+    const uncatId = uncatDb.rows.length > 0 ? uncatDb.rows[0].id : null;
+
+    // Отвязываем все услуги от этой категории (переносим в "Без категории")
+    await db.query('UPDATE services SET category_id = $1 WHERE category_id = $2', [uncatId, id]);
+
+    const result = await db.query('DELETE FROM categories WHERE id = $1 RETURNING id', [id]);
+    res.json({ message: 'Категория успешно удалена, услуги перенесены в категорию «Без категории»' });
   } catch (error) {
     console.error('Ошибка удаления категории:', error);
     res.status(500).json({ error: 'Не удалось удалить категорию' });

@@ -8,7 +8,7 @@ router.use(requireAuth);
 // POST /api/orders - Оформление заказа из корзины с сохранением в БД
 router.post('/', async (req, res) => {
   try {
-    const { delivery_address, delivery_date } = req.body;
+    const { delivery_address, delivery_date, coupon_code } = req.body;
 
     // 1. Валидация адреса доставки
     if (!delivery_address || delivery_address.trim().length < 5) {
@@ -44,6 +44,7 @@ router.post('/', async (req, res) => {
         s.price, 
         COALESCE(s.discount_percent, 0)::int AS discount_percent,
         ROUND(s.price * (1 - COALESCE(s.discount_percent, 0)::numeric / 100), 2)::numeric(10,2) AS final_price,
+        COALESCE(s.stock, 10)::int AS stock,
         COALESCE(c.name, 'Без категории') AS category_name
       FROM cart_items ci
       JOIN services s ON ci.service_id = s.id
@@ -57,11 +58,11 @@ router.post('/', async (req, res) => {
 
     const cartItems = cartRes.rows;
 
-    // Валидация лимитов мастера (Вариант А)
+    // Валидация остатка на складе
     for (const item of cartItems) {
-      if (item.quantity > 3) {
+      if (item.quantity > item.stock) {
         return res.status(400).json({
-          error: `Услуга "${item.service_name}" не может быть заказана более 3 раз в рамках одного визита к мастеру.`
+          error: `Услуги/товара "${item.service_name}" недостаточно на складе (в наличии: ${item.stock} шт., в заказе: ${item.quantity} шт.).`
         });
       }
     }
@@ -73,7 +74,24 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const totalPrice = cartItems.reduce((sum, item) => sum + (Number(item.final_price || item.price) * item.quantity), 0);
+    const subtotal = cartItems.reduce((sum, item) => sum + (Number(item.final_price || item.price) * item.quantity), 0);
+
+    // Валидация промокода (если указан)
+    let appliedCoupon = null;
+    let discountAmount = 0;
+    if (coupon_code && coupon_code.trim()) {
+      const cRes = await db.query(
+        'SELECT code, discount_percent, is_active FROM coupons WHERE UPPER(code) = $1',
+        [coupon_code.trim().toUpperCase()]
+      );
+      if (cRes.rows.length > 0 && cRes.rows[0].is_active) {
+        appliedCoupon = cRes.rows[0].code;
+        const discPercent = cRes.rows[0].discount_percent;
+        discountAmount = Math.round(subtotal * (discPercent / 100.0) * 100) / 100;
+      }
+    }
+
+    const finalTotalPrice = Math.max(0, subtotal - discountAmount);
 
     // 4. Создание записи заказа в транзакции
     const client = await db.pool.connect();
@@ -81,20 +99,27 @@ router.post('/', async (req, res) => {
       await client.query('BEGIN');
 
       const orderInsertRes = await client.query(`
-        INSERT INTO orders (user_id, delivery_address, delivery_date, total_price, status)
-        VALUES ($1, $2, $3, $4, 'Принят')
-        RETURNING id, delivery_address, delivery_date, total_price, status, created_at
-      `, [req.user.id, delivery_address.trim(), delivery_date, totalPrice]);
+        INSERT INTO orders (user_id, delivery_address, delivery_date, total_price, coupon_code, discount_amount, status)
+        VALUES ($1, $2, $3, $4, $5, $6, 'Принят')
+        RETURNING id, delivery_address, delivery_date, total_price, coupon_code, discount_amount, status, created_at
+      `, [req.user.id, delivery_address.trim(), delivery_date, finalTotalPrice, appliedCoupon, discountAmount]);
 
       const order = orderInsertRes.rows[0];
 
-      // Сохранение каждой позиции заказа с учетом скидки
+      // Сохранение каждой позиции заказа и списание со склада
       for (const item of cartItems) {
         const itemPrice = Number(item.final_price || item.price);
         await client.query(`
           INSERT INTO order_items (order_id, service_id, quantity, price_at_order)
           VALUES ($1, $2, $3, $4)
         `, [order.id, item.service_id, item.quantity, itemPrice]);
+
+        // Списание со склада
+        await client.query(`
+          UPDATE services 
+          SET stock = GREATEST(0, stock - $1)
+          WHERE id = $2
+        `, [item.quantity, item.service_id]);
       }
 
       // Очищаем корзину пользователя в БД
@@ -116,6 +141,8 @@ router.post('/', async (req, res) => {
           delivery_address: order.delivery_address,
           delivery_date: order.delivery_date,
           total_price: order.total_price,
+          coupon_code: order.coupon_code,
+          discount_amount: order.discount_amount,
           status: order.status,
           created_at: order.created_at,
           items_count: cartItems.length
@@ -142,6 +169,8 @@ router.get('/my', async (req, res) => {
         o.delivery_address,
         o.delivery_date,
         o.total_price,
+        o.coupon_code,
+        COALESCE(o.discount_amount, 0)::numeric(10,2) AS discount_amount,
         o.status,
         o.created_at,
         u.name AS user_name,
@@ -152,7 +181,8 @@ router.get('/my', async (req, res) => {
             'service_name', s.name,
             'category_name', COALESCE(c.name, 'Без категории'),
             'quantity', oi.quantity,
-            'price', oi.price_at_order
+            'price', oi.price_at_order,
+            'image_url', s.image_url
           ))
           FROM order_items oi
           JOIN services s ON oi.service_id = s.id

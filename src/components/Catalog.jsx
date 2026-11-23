@@ -83,19 +83,18 @@ export default function Catalog({
             </div>
           ))}
 
-          {/* Если есть услуги без категории, но их ещё нет в safeCategories, отображаем пункт */}
-          {!safeCategories.some((c) => c.name === 'Без категории') &&
-            safeServices.filter((s) => !s.category_name || s.category_name === 'Без категории').length > 0 && (
-              <div
-                className={`category-filter-item ${selectedCategory === 'Без категории' ? 'active' : ''}`}
-                onClick={() => onSelectCategory('Без категории')}
-              >
-                <span>Без категории</span>
-                <span className="count-badge">
-                  {safeServices.filter((s) => !s.category_name || s.category_name === 'Без категории').length}
-                </span>
-              </div>
-            )}
+          {/* Категория «Без категории» — отображается всегда */}
+          {!safeCategories.some((c) => c.name === 'Без категории') && (
+            <div
+              className={`category-filter-item ${selectedCategory === 'Без категории' ? 'active' : ''}`}
+              onClick={() => onSelectCategory('Без категории')}
+            >
+              <span>Без категории</span>
+              <span className="count-badge">
+                {safeServices.filter((s) => !s.category_name || s.category_name === 'Без категории').length}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Дополнительный фильтр по цене */}

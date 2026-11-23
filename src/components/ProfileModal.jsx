@@ -56,19 +56,43 @@ export default function ProfileModal({
     e.preventDefault();
     setInfoMsg(null);
 
+    const trimmedName = name.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      setInfoMsg({ type: 'error', text: 'Имя должно содержать не менее 2 символов' });
+      return;
+    }
+    const nameRegex = /^[a-zA-Zа-яА-ЯёЁ\s\-]+$/;
+    if (!nameRegex.test(trimmedName)) {
+      setInfoMsg({ type: 'error', text: 'Имя может содержать только буквы, дефисы и пробелы' });
+      return;
+    }
+
+    const trimmedEmail = email.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
+      setInfoMsg({ type: 'error', text: 'Введите корректный адрес электронной почты (Email)' });
+      return;
+    }
+
     const phoneDigits = phone ? phone.replace(/\D/g, '') : '';
     if (phone && phoneDigits.length !== 11) {
       setInfoMsg({ type: 'error', text: 'Номер телефона должен содержать ровно 11 цифр (например, +7 (911) 811-21-22)' });
       return;
     }
 
+    const trimmedAddress = address.trim();
+    if (trimmedAddress && trimmedAddress.length < 5) {
+      setInfoMsg({ type: 'error', text: 'Адрес должен содержать не менее 5 символов' });
+      return;
+    }
+
     try {
       setInfoSaving(true);
       const res = await updateProfile({
-        name: name.trim(),
-        email: email.trim(),
+        name: trimmedName,
+        email: trimmedEmail,
         phone: phone.trim(),
-        default_address: address.trim()
+        default_address: trimmedAddress
       });
       localStorage.setItem('token', res.token);
       onProfileUpdated(res.user);
@@ -180,8 +204,22 @@ export default function ProfileModal({
                           <td><strong>№ {index + 1}</strong></td>
                           <td>{new Date(o.delivery_date).toLocaleDateString('ru-RU')}</td>
                           <td>{o.delivery_address}</td>
-                          <td style={{ maxWidth: '200px' }}>
-                            <span style={{ fontSize: '13px' }}>{o.items_summary}</span>
+                          <td style={{ maxWidth: '240px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: '500' }}>{o.items_summary}</div>
+                            {o.coupon_code && (
+                              <div style={{
+                                display: 'inline-block',
+                                marginTop: '4px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                background: 'rgba(34, 197, 94, 0.15)',
+                                color: '#16a34a',
+                                fontSize: '11px',
+                                fontWeight: '600'
+                              }}>
+                                🎟 Купон: {o.coupon_code} (-{Number(o.discount_amount).toLocaleString('ru-RU')} ₽)
+                              </div>
+                            )}
                           </td>
                           <td style={{ fontWeight: 'bold', color: 'var(--accent-color)' }}>
                             {Number(o.total_price).toLocaleString('ru-RU')} ₽

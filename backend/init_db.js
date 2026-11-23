@@ -55,17 +55,46 @@ async function initDatabase() {
         duration_minutes INT NOT NULL DEFAULT 60,
         price NUMERIC(10, 2) NOT NULL DEFAULT 1000,
         discount_percent INT DEFAULT 0,
+        stock INT NOT NULL DEFAULT 10,
         image_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     await db.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS discount_percent INT DEFAULT 0`);
+    await db.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS stock INT NOT NULL DEFAULT 10`);
     await db.query(`
       ALTER TABLE services DROP CONSTRAINT IF EXISTS services_category_id_fkey;
       ALTER TABLE services ADD CONSTRAINT services_category_id_fkey FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL;
     `);
 
-    // 5. Cart Items (хранится в БД, привязана к пользователю)
+    // 5. Coupons (Промокоды на скидку)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS coupons (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) UNIQUE,
+        discount_percent INT NOT NULL CHECK(discount_percent > 0 AND discount_percent <= 99),
+        description VARCHAR(255),
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS code VARCHAR(50)`);
+    await db.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS description VARCHAR(255)`);
+    await db.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
+    await db.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await db.query(`ALTER TABLE coupons ALTER COLUMN name DROP NOT NULL`);
+    await db.query(`UPDATE coupons SET code = name WHERE code IS NULL AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupons' AND column_name = 'name')`);
+    await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_coupons_code ON coupons(code)`);
+    await db.query(`
+      INSERT INTO coupons (name, code, discount_percent, description)
+      VALUES 
+        ('LAVKA10', 'LAVKA10', 10, 'Скидка 10% на любой заказ'),
+        ('BEAUTY15', 'BEAUTY15', 15, 'Скидка 15% на бьюти-процедуры'),
+        ('STUDENT20', 'STUDENT20', 20, 'Скидка 20% для студентов')
+      ON CONFLICT (code) DO NOTHING
+    `);
+
+    // 6. Cart Items (хранится в БД, привязана к пользователю)
     await db.query(`
       CREATE TABLE IF NOT EXISTS cart_items (
         id SERIAL PRIMARY KEY,
@@ -77,7 +106,7 @@ async function initDatabase() {
       )
     `);
 
-    // 6. Orders
+    // 7. Orders
     await db.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
@@ -85,10 +114,14 @@ async function initDatabase() {
         delivery_address TEXT NOT NULL,
         delivery_date DATE NOT NULL,
         total_price NUMERIC(10, 2) NOT NULL,
+        coupon_code VARCHAR(50),
+        discount_amount NUMERIC(10, 2) DEFAULT 0,
         status VARCHAR(50) NOT NULL DEFAULT 'Принят',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50)`);
+    await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(10, 2) DEFAULT 0`);
 
     // 7. Order Items
     await db.query(`
@@ -155,7 +188,8 @@ async function initDatabase() {
       ['Парикмахерские услуги', 'Стрижки, окрашивания, авторские укладки'],
       ['Маникюр и педикюр', 'Уход за ногтями, стойкое покрытие и спа-процедуры'],
       ['Массаж', 'Классический, антистресс и оздоровительный массаж'],
-      ['Косметология', 'Аппаратный уход, чистки лица и питательные маски']
+      ['Косметология', 'Аппаратный уход, чистки лица и питательные маски'],
+      ['Без категории', 'Услуги и товары общего назначения']
     ];
 
     for (const [name, desc] of cats) {

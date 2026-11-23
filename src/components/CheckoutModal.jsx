@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { createOrder } from '../api/orders';
+import { validateCoupon } from '../api/coupons';
 
-// Модальное окно оформления заказа с валидацией адреса и даты доставки
+// Модальное окно оформления заказа с валидацией адреса, даты доставки и промокодами
 export default function CheckoutModal({
   isOpen,
   onClose,
@@ -15,6 +16,12 @@ export default function CheckoutModal({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
+  // Промокод
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponMsg, setCouponMsg] = useState(null);
+
   // Минимальная дата доставки — сегодня
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -26,7 +33,34 @@ export default function CheckoutModal({
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setDeliveryDate(tomorrow.toISOString().split('T')[0]);
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponMsg(null);
   }, [user, isOpen]);
+
+  const handleApplyCoupon = async (e) => {
+    if (e) e.preventDefault();
+    if (!couponInput.trim()) {
+      setCouponMsg({ type: 'error', text: 'Введите промокод' });
+      return;
+    }
+
+    try {
+      setCouponLoading(true);
+      setCouponMsg(null);
+      const res = await validateCoupon(couponInput.trim());
+      setAppliedCoupon(res);
+      setCouponMsg({ type: 'success', text: `Промокод "${res.code}" применен! Скидка: -${res.discount_percent}%` });
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponMsg({ type: 'error', text: err.message || 'Промокод не найден' });
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const discountAmount = appliedCoupon ? Math.round(cartTotal * (appliedCoupon.discount_percent / 100)) : 0;
+  const finalTotal = Math.max(0, cartTotal - discountAmount);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -59,7 +93,8 @@ export default function CheckoutModal({
       setLoading(true);
       const res = await createOrder({
         delivery_address: deliveryAddress.trim(),
-        delivery_date: deliveryDate
+        delivery_date: deliveryDate,
+        coupon_code: appliedCoupon ? appliedCoupon.code : null
       });
 
       alert(res.message);
@@ -109,10 +144,57 @@ export default function CheckoutModal({
                 <span>Количество позиций:</span>
                 <strong>{cartItems.length}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px' }}>
-                <span>Сумма к оплате:</span>
-                <strong style={{ color: 'var(--accent-color)' }}>{typeof formatPrice === 'function' ? formatPrice(cartTotal) : `${cartTotal} ₽`}</strong>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px' }}>
+                <span>Сумма без промокода:</span>
+                <span>{cartTotal.toLocaleString('ru-RU')} ₽</span>
               </div>
+              {appliedCoupon && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px', color: '#16a34a' }}>
+                  <span>Промокод ({appliedCoupon.code} -{appliedCoupon.discount_percent}%):</span>
+                  <strong>-{discountAmount.toLocaleString('ru-RU')} ₽</strong>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '6px', marginTop: '4px' }}>
+                <span>Итого к оплате:</span>
+                <strong style={{ color: 'var(--accent-color)' }}>{finalTotal.toLocaleString('ru-RU')} ₽</strong>
+              </div>
+            </div>
+
+            {/* Промокод */}
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label>Промокод на скидку:</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="LAVKA10, BEAUTY15, STUDENT20"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  style={{ textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={handleApplyCoupon}
+                  disabled={couponLoading || !couponInput.trim()}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {couponLoading ? '...' : 'Применить'}
+                </button>
+              </div>
+              {couponMsg && (
+                <div style={{
+                  fontSize: '12px',
+                  marginTop: '4px',
+                  color: couponMsg.type === 'success' ? '#16a34a' : 'var(--danger-color)',
+                  fontWeight: '500'
+                }}>
+                  {couponMsg.text}
+                </div>
+              )}
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginTop: '3px' }}>
+                Активные промокоды: <strong>LAVKA10</strong> (-10%), <strong>BEAUTY15</strong> (-15%), <strong>STUDENT20</strong> (-20%)
+              </span>
             </div>
 
             {/* Поле: Адрес доставки */}
@@ -164,7 +246,7 @@ export default function CheckoutModal({
               Отмена
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Сохранение заказа на сервере...' : `Подтвердить заказ (${typeof formatPrice === 'function' ? formatPrice(cartTotal) : `${cartTotal} ₽`})`}
+              {loading ? 'Сохранение заказа на сервере...' : `Подтвердить заказ (${finalTotal.toLocaleString('ru-RU')} ₽)`}
             </button>
           </div>
         </form>
