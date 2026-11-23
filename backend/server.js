@@ -101,27 +101,37 @@ async function start() {
   return new Promise((resolve, reject) => {
     if (serverInstance) return resolve(serverInstance);
 
-    const s = app.listen(PORT);
-    s.on('listening', () => {
-      serverInstance = s;
-      console.log(`Backend running on http://localhost:${PORT}`);
-      resolve(serverInstance);
-    });
+    let attempts = 0;
+    const maxRetries = 5;
 
-    s.on('error', async (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.warn(`[Server] Порт ${PORT} занят другим процессом. Автоматически освобождаем порт...`);
-        freePort(PORT);
-        await new Promise(r => setTimeout(r, 600));
-        serverInstance = app.listen(PORT, () => {
-          console.log(`Backend running on http://localhost:${PORT}`);
-          resolve(serverInstance);
-        });
-      } else {
-        console.error('Ошибка запуска сервера:', err);
-        reject(err);
-      }
-    });
+    function tryBind() {
+      attempts++;
+      const s = app.listen(PORT);
+
+      s.once('listening', () => {
+        serverInstance = s;
+        console.log(`Backend running on http://localhost:${PORT}`);
+        resolve(serverInstance);
+      });
+
+      s.once('error', async (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.warn(`[Server] Порт ${PORT} занят. Освобождаем порт (попытка ${attempts}/${maxRetries})...`);
+          freePort(PORT);
+          if (attempts < maxRetries) {
+            await new Promise(r => setTimeout(r, 700));
+            tryBind();
+          } else {
+            reject(err);
+          }
+        } else {
+          console.error('Ошибка запуска сервера:', err);
+          reject(err);
+        }
+      });
+    }
+
+    tryBind();
   });
 }
 

@@ -123,26 +123,35 @@ function startFrontend() {
       console.error('Ошибка сборки React бандла:', e.message);
     }
 
-    server.listen(PORT);
+    let attempts = 0;
+    const maxRetries = 5;
 
-    server.once('listening', () => {
-      isListening = true;
-      resolve(server);
-    });
+    function tryBind() {
+      attempts++;
+      server.listen(PORT);
 
-    server.once('error', async (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.warn(`[Frontend] Порт ${PORT} занят. Освобождаем порт...`);
-        freePort(PORT);
-        await new Promise(r => setTimeout(r, 600));
-        server.listen(PORT, () => {
-          isListening = true;
-          resolve(server);
-        });
-      } else {
-        reject(err);
-      }
-    });
+      server.once('listening', () => {
+        isListening = true;
+        resolve(server);
+      });
+
+      server.once('error', async (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.warn(`[Frontend] Порт ${PORT} занят. Освобождаем порт (попытка ${attempts}/${maxRetries})...`);
+          freePort(PORT);
+          if (attempts < maxRetries) {
+            await new Promise(r => setTimeout(r, 700));
+            tryBind();
+          } else {
+            reject(err);
+          }
+        } else {
+          reject(err);
+        }
+      });
+    }
+
+    tryBind();
   });
 }
 
